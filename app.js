@@ -672,7 +672,7 @@
     };
 
     function updateStageLayout() {
-        if (!videoGrid || !thumbnailsStrip) return;
+        if (!videoGrid) return;
 
         const allTiles = [
             { uid: 'local', el: localVideoTile },
@@ -680,27 +680,20 @@
         ].filter(t => t.el !== null);
 
         if (spotlightUid) {
-            // 大屏幕 Spotlight 模式
-            videoGrid.className = 'video-grid-container spotlight-mode';
-            thumbnailsStrip.style.display = 'flex';
-
+            // 大屏幕 Spotlight 模式 (純 CSS 控制，避免 DOM 移動導致 video 暫停/黑屏)
+            videoGrid.classList.add('spotlight-mode');
             allTiles.forEach(t => {
                 if (t.uid === spotlightUid) {
                     t.el.classList.add('is-spotlight');
-                    videoGrid.insertBefore(t.el, thumbnailsStrip);
                 } else {
                     t.el.classList.remove('is-spotlight');
-                    thumbnailsStrip.appendChild(t.el);
                 }
             });
         } else {
             // 網格模式
-            videoGrid.className = 'video-grid-container';
-            thumbnailsStrip.style.display = 'none';
-
+            videoGrid.classList.remove('spotlight-mode');
             allTiles.forEach(t => {
                 t.el.classList.remove('is-spotlight');
-                videoGrid.appendChild(t.el);
             });
             adjustGridColumns();
         }
@@ -710,23 +703,46 @@
     window.toggleScreenShare = async function() {
         if (!isScreenSharing) {
             try {
-                screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-                const screenTrack = screenStream.getVideoTracks()[0];
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+                    showToast('⚠️ 當前瀏覽器/設備不支援螢幕分享');
+                    return;
+                }
 
+                screenStream = await navigator.mediaDevices.getDisplayMedia({
+                    video: {
+                        cursor: 'always'
+                    },
+                    audio: false
+                });
+
+                const screenTrack = screenStream.getVideoTracks()[0];
+                if (!screenTrack) return;
+
+                // 替換所有 WebRTC 連線中的視訊軌道
                 for (const uid in peers) {
-                    const sender = peers[uid].pc.getSenders().find(s => s.track && s.track.kind === 'video');
-                    if (sender) {
-                        sender.replaceTrack(screenTrack);
+                    const pc = peers[uid].pc;
+                    if (!pc) continue;
+                    try {
+                        const senders = pc.getSenders();
+                        const videoSender = senders.find(s => s.track && s.track.kind === 'video') || senders.find(s => s.kind === 'video');
+                        if (videoSender) {
+                            await videoSender.replaceTrack(screenTrack);
+                        } else {
+                            pc.addTrack(screenTrack, screenStream);
+                        }
+                    } catch (e) {
+                        console.warn('[Cobin] 替換螢幕軌道警告:', e);
                     }
                 }
 
                 localVideo.srcObject = screenStream;
+                localVideo.play().catch(() => {});
                 localVideoTile.classList.add('is-screen');
                 if (localScreenBadge) localScreenBadge.style.display = 'inline-block';
                 isScreenSharing = true;
                 btnShareScreen.classList.add('active');
 
-                // 自動放大至大屏幕
+                // 本地螢幕分享自動放大至大屏幕
                 spotlightUid = 'local';
                 updateStageLayout();
 
@@ -743,31 +759,39 @@
                     stopScreenShare();
                 };
 
-                showToast('🖥️ 已開啟螢幕分享 (已展示在大屏幕)');
+                showToast('🖥️ 已開啟螢幕分享 (大屏幕展示中)');
             } catch (err) {
-                console.error('[Cobin] 螢幕分享失敗:', err);
+                console.error('[Cobin] 螢幕分享失敗/使用者取消:', err);
             }
         } else {
             stopScreenShare();
         }
     };
 
-    function stopScreenShare() {
+    async function stopScreenShare() {
         if (!isScreenSharing) return;
+
         if (screenStream) {
             screenStream.getTracks().forEach(t => t.stop());
             screenStream = null;
         }
 
+        // 恢復本地鏡頭視訊軌道
         if (localStream) {
             const camTrack = localStream.getVideoTracks()[0];
             for (const uid in peers) {
-                const sender = peers[uid].pc.getSenders().find(s => s.track && s.track.kind === 'video');
-                if (sender && camTrack) {
-                    sender.replaceTrack(camTrack);
-                }
+                const pc = peers[uid].pc;
+                if (!pc) continue;
+                try {
+                    const senders = pc.getSenders();
+                    const videoSender = senders.find(s => s.track && s.track.kind === 'video') || senders.find(s => s.kind === 'video');
+                    if (videoSender && camTrack) {
+                        await videoSender.replaceTrack(camTrack);
+                    }
+                } catch (e) {}
             }
             localVideo.srcObject = localStream;
+            localVideo.play().catch(() => {});
         }
 
         localVideoTile.classList.remove('is-screen');

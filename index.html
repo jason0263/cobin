@@ -447,60 +447,66 @@
         .video-grid-container {
             flex: 1;
             padding: 14px 14px calc(90px + var(--safe-bottom)) 14px;
-            display: grid;
-            gap: 12px;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            display: flex;
+            flex-wrap: wrap;
             align-content: center;
             justify-content: center;
+            gap: 12px;
             overflow-y: auto;
             height: 100%;
             transition: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
         }
 
-        .video-grid-container.single-user {
-            grid-template-columns: minmax(280px, 800px);
+        .video-grid-container .video-tile {
+            flex: 1 1 340px;
+            max-width: 680px;
+            min-width: 260px;
+            aspect-ratio: 16 / 9;
+            height: auto;
+            max-height: calc(50vh - 70px);
         }
 
-        /* 🌟 大屏幕焦點模式 (Spotlight / 螢幕分享展示佈局) */
+        .video-grid-container.single-user .video-tile {
+            flex: 1 1 720px;
+            max-width: 860px;
+            max-height: calc(100vh - 180px);
+        }
+
+        /* 🌟 大屏幕焦點模式 (Spotlight / 螢幕分享展示佈局 - 純 CSS 零延遲) */
         .video-grid-container.spotlight-mode {
-            display: flex;
-            flex-direction: row;
-            gap: 14px;
-            padding: 14px 14px calc(90px + var(--safe-bottom)) 14px;
-            height: 100%;
-            overflow: hidden;
+            display: flex !important;
+            flex-direction: row !important;
+            flex-wrap: nowrap !important;
+            align-items: stretch !important;
+            justify-content: flex-start !important;
+            gap: 14px !important;
+            overflow: hidden !important;
         }
 
         .video-grid-container.spotlight-mode .video-tile.is-spotlight {
-            flex: 1;
-            height: 100%;
-            max-height: calc(100vh - 170px);
-            aspect-ratio: auto;
-            border-color: rgba(88, 101, 242, 0.6);
-            box-shadow: 0 16px 48px rgba(0, 0, 0, 0.7);
+            flex: 1 1 80% !important;
+            max-width: unset !important;
+            min-width: unset !important;
+            height: 100% !important;
+            max-height: calc(100vh - 170px) !important;
+            order: -1 !important; /* 大屏幕永遠排在第一位 */
+            border-color: rgba(88, 101, 242, 0.8) !important;
+            box-shadow: 0 16px 48px rgba(0, 0, 0, 0.7) !important;
             z-index: 5;
         }
 
         .video-grid-container.spotlight-mode .video-tile.is-spotlight video {
-            object-fit: contain !important; /* 螢幕分享完整展示不裁切文字 */
+            object-fit: contain !important; /* 螢幕分享完整清晰不裁切 */
             background: #000;
         }
 
-        .video-grid-container.spotlight-mode .thumbnails-strip {
-            width: 220px;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-            overflow-y: auto;
-            flex-shrink: 0;
-            padding-right: 4px;
-        }
-
-        .video-grid-container.spotlight-mode .thumbnails-strip .video-tile {
-            width: 100%;
-            height: 130px;
-            aspect-ratio: 16 / 9;
-            flex-shrink: 0;
+        .video-grid-container.spotlight-mode .video-tile:not(.is-spotlight) {
+            flex: 0 0 200px !important;
+            max-width: 200px !important;
+            min-width: unset !important;
+            height: 120px !important;
+            aspect-ratio: 16 / 9 !important;
+            order: 1 !important;
             cursor: pointer;
         }
 
@@ -1093,7 +1099,6 @@
                     <span class="screen-badge" id="localScreenBadge" style="display:none;">螢幕分享</span>
                 </div>
             </div>
-            <div class="thumbnails-strip" id="thumbnailsStrip" style="display:none;"></div>
         </section>
 
         <!-- 底部浮動通話按鈕條 -->
