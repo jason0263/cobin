@@ -1,15 +1,11 @@
-// app.js - Cobin Voice & Video (點擊即入、極速通話)
+// app.js - Cobin Voice & Video (多房間 WebRTC 即時通話前端邏輯)
 
 (() => {
-    // ==== 基礎變數與狀態 ====
-    const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    let host = location.hostname;
-    if (!host || host === 'localhost' || host === '') {
-        host = '127.0.0.1';
-    }
-    const wsPort = '8080';
-    const wsUrl = `${wsProtocol}//${host}:${wsPort}`;
+    console.log('[Cobin] app.js 已載入');
 
+    // ==== 基礎變數與狀態 ====
+    const wsHosts = ['127.0.0.1', 'localhost'];
+    let currentHostIndex = 0;
     let ws = null;
     let myUid = null;
     let myNickname = '用戶 ' + Math.floor(1000 + Math.random() * 9000);
@@ -20,7 +16,7 @@
 
     let currentRoomId = null;
     let currentRoomName = '';
-    let pendingRoomId = null; // 當 WebSocket 尚未連線時暫存的預備進入房間
+    let pendingRoomId = null;
 
     // 媒體狀態
     let localStream = null;
@@ -39,7 +35,7 @@
     // 音訊檢測 (Speaking Indicator)
     let audioContext = null;
 
-    // ICE 配置 (Google 公開 STUN 伺服器)
+    // ICE 配置 (Google STUN)
     const rtcConfig = {
         iceServers: [
             { urls: 'stun:stun.l.google.com:19302' },
@@ -79,14 +75,13 @@
     const nicknameInput = document.getElementById('nicknameInput');
     const toastMsg = document.getElementById('toastMsg');
 
-    // 房間名稱對照
     const roomNameMap = {
         'room-1': '語音大廳 1',
         'room-2': '遊戲開黑 2',
         'room-3': '私人會議 3'
     };
 
-    // ==== 初始化使用者介面 ====
+    // ==== 初始化使用者個人介面 ====
     function updateMyProfileUI() {
         myNicknameText.textContent = myNickname;
         myAvatarSm.textContent = myNickname.charAt(0).toUpperCase();
@@ -96,53 +91,51 @@
     }
     updateMyProfileUI();
 
-    // ==== WebSocket 連線 ====
+    // ==== WebSocket 連線核心 (支援自動重試與 Host 切換) ====
     function initWebSocket() {
+        const host = wsHosts[currentHostIndex];
+        const wsUrl = `ws://${host}:8080`;
+        console.log(`[Cobin] 嘗試連線至信令伺服器: ${wsUrl}`);
+
         try {
             ws = new WebSocket(wsUrl);
-        } catch (e) {
-            console.error('WebSocket 初始化失敗:', e);
-            wsStatusTag.textContent = '🔴 離線模式';
+        } catch (err) {
+            console.error('[Cobin] WebSocket 創建失敗:', err);
+            handleWsError();
             return;
         }
 
-        ws.addEventListener('open', () => {
+        ws.onopen = () => {
+            console.log(`[Cobin] ✅ WebSocket 成功連線 (${wsUrl})`);
             wsStatusTag.textContent = '🟢 已連線';
             wsStatusTag.style.color = 'var(--accent-green)';
-            console.log('WebSocket 連線成功:', wsUrl);
 
-            // 發送初始使用者資訊
+            // 送出暱稱初始化
             ws.send(JSON.stringify({
                 type: 'init',
                 nickname: myNickname
             }));
 
-            // 如果有等待進入的房間，立即送出加入信令
+            // 如果有等待中的房間加入請求，立即發送
             if (pendingRoomId) {
                 const target = pendingRoomId;
                 pendingRoomId = null;
                 sendJoinRoomSignal(target);
-            } else {
-                // 檢查 URL 參數
-                const urlParams = new URLSearchParams(window.location.search);
-                const targetRoom = urlParams.get('room');
-                if (targetRoom && roomNameMap[targetRoom]) {
-                    joinRoom(targetRoom);
-                }
             }
-        });
+        };
 
-        ws.addEventListener('close', () => {
-            wsStatusTag.textContent = '🔴 未連線 (重試中)';
+        ws.onclose = (event) => {
+            console.warn(`[Cobin] ⚠️ WebSocket 斷線 (代碼: ${event.code})`);
+            wsStatusTag.textContent = '🔴 未連線';
             wsStatusTag.style.color = 'var(--accent-red)';
-            setTimeout(initWebSocket, 2500);
-        });
+            handleWsError();
+        };
 
-        ws.addEventListener('error', (err) => {
-            console.error('WebSocket 錯誤:', err);
-        });
+        ws.onerror = (err) => {
+            console.error('[Cobin] WebSocket 發生錯誤:', err);
+        };
 
-        ws.addEventListener('message', async (event) => {
+        ws.onmessage = async (event) => {
             let data;
             try {
                 data = JSON.parse(event.data);
@@ -150,9 +143,14 @@
                 return;
             }
 
+            console.log('[Cobin] 收到信令:', data.type, data);
+
             switch (data.type) {
                 case 'init-ack':
                     myUid = data.uid;
+                    if (data.rooms) {
+                        renderRoomsStatus(data.rooms);
+                    }
                     break;
 
                 case 'rooms-status':
@@ -183,13 +181,20 @@
                     cleanupCallState();
                     break;
             }
-        });
+        };
+    }
+
+    function handleWsError() {
+        // 切換下一個 host 重試 (127.0.0.1 <-> localhost)
+        currentHostIndex = (currentHostIndex + 1) % wsHosts.length;
+        setTimeout(initWebSocket, 2000);
     }
 
     initWebSocket();
 
-    // ==== 渲染房間在線清單 ====
+    // ==== 渲染左側房間在線列表 ====
     function renderRoomsStatus(rooms) {
+        if (!rooms) return;
         for (const roomId in rooms) {
             const roomData = rooms[roomId];
             const countBadge = document.getElementById(`count-${roomId}`);
@@ -219,11 +224,11 @@
         }
     }
 
-    // ==== 核心：使用者點擊房間立即進入通話 ====
+    // ==== 核心：點擊房間立即進入通話 ====
     window.joinRoom = async function(roomId) {
-        if (currentRoomId === roomId) return; // 已在該房間
+        console.log('[Cobin] 點擊進入房間:', roomId);
+        if (currentRoomId === roomId) return;
 
-        // 若已在其他房間，先離開舊通話
         if (currentRoomId) {
             await leaveRoomInternal();
         }
@@ -232,7 +237,7 @@
         currentRoomName = roomNameMap[roomId] || roomId;
         currentRoomNameTitle.textContent = currentRoomName;
 
-        // 1. 立即切換 UI (零等待顯示通話介面)
+        // 1. 0 延遲切換 UI
         document.querySelectorAll('.room-item').forEach(el => el.classList.remove('active'));
         const activeItem = document.getElementById(`room-item-${roomId}`);
         if (activeItem) activeItem.classList.add('active');
@@ -244,20 +249,20 @@
         startCallTimer();
         adjustGridColumns();
 
-        // 2. 立即獲取並播放本端影像/音訊
+        // 2. 獲取本地媒體 (鏡頭與麥克風)
         try {
             await initLocalMedia();
         } catch (err) {
-            console.warn('媒體存取受限:', err);
-            showToast('⚠️ 請允許瀏覽器使用鏡頭與麥克風');
+            console.warn('[Cobin] 媒體請求失敗:', err);
+            showToast('⚠️ 請允許存取麥克風與鏡頭');
         }
 
-        // 3. 發送加入房間信令
+        // 3. 送出加入房間信令
         if (ws && ws.readyState === WebSocket.OPEN) {
             sendJoinRoomSignal(roomId);
         } else {
             pendingRoomId = roomId;
-            showToast('🚀 正在連接通話伺服器...');
+            showToast('🚀 正在連接信令伺服器...');
         }
     };
 
@@ -271,7 +276,7 @@
         }));
     }
 
-    // ==== 初始化本地攝影機與麥克風 ====
+    // ==== 初始化本地媒體 ====
     async function initLocalMedia() {
         if (!localStream) {
             try {
@@ -280,7 +285,6 @@
                     audio: true
                 });
             } catch (e) {
-                // 如果沒有攝影機或拒絕鏡頭，嘗試僅獲取音訊
                 try {
                     localStream = await navigator.mediaDevices.getUserMedia({
                         video: false,
@@ -288,7 +292,7 @@
                     });
                     isCameraEnabled = false;
                 } catch (e2) {
-                    console.error('無法取得任何媒體串流', e2);
+                    console.error('[Cobin] 存取麥克風失敗:', e2);
                 }
             }
 
@@ -307,7 +311,7 @@
         updateMicUI();
     }
 
-    // ==== 伺服器確認加入房間成功 (建立與現有成員的連線) ====
+    // ==== 伺服器確認加入房間 ====
     async function handleJoinedRoomSuccess(data) {
         currentRoomName = data.roomName || currentRoomName;
         currentRoomNameTitle.textContent = currentRoomName;
@@ -315,7 +319,6 @@
         const existingUsers = data.users || [];
         roomParticipantsCount.textContent = `${existingUsers.length + 1} 位成員在線`;
 
-        // 針對同房間已有的使用者發起 WebRTC Offer
         for (const user of existingUsers) {
             await createPeerConnection(user.uid, user.nickname, true);
         }
@@ -324,7 +327,7 @@
     // ==== 新使用者加入房間 ====
     async function handleUserJoined(user) {
         if (user.uid === myUid) return;
-        showToast(`👋 ${user.nickname} 加入了通話`);
+        showToast(`👋 ${user.nickname} 加入了房間`);
         ensureUserVideoTile(user.uid, user.nickname);
     }
 
@@ -343,7 +346,7 @@
         }
     }
 
-    // ==== 建立 RTCPeerConnection (Mesh P2P 架構) ====
+    // ==== 建立 WebRTC 連線 (Mesh P2P) ====
     async function createPeerConnection(targetUid, targetNickname, isInitiator) {
         if (peers[targetUid] && peers[targetUid].pc) {
             return peers[targetUid].pc;
@@ -361,14 +364,12 @@
             micIcon: tile.querySelector('.mic-status-icon')
         };
 
-        // 加入本地 tracks
         if (localStream) {
             localStream.getTracks().forEach(track => {
                 pc.addTrack(track, localStream);
             });
         }
 
-        // 遠端 Track 到達
         pc.ontrack = (event) => {
             const remoteStream = event.streams[0];
             const peerObj = peers[targetUid];
@@ -378,7 +379,6 @@
             }
         };
 
-        // ICE Candidate 交換
         pc.onicecandidate = (event) => {
             if (event.candidate && ws && ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({
@@ -398,7 +398,6 @@
             }
         };
 
-        // 主動發起 Offer
         if (isInitiator) {
             try {
                 const offer = await pc.createOffer();
@@ -414,7 +413,7 @@
                     }));
                 }
             } catch (err) {
-                console.error('建立 Offer 失敗:', err);
+                console.error('[Cobin] 建立 Offer 失敗:', err);
             }
         }
 
@@ -422,7 +421,7 @@
         return pc;
     }
 
-    // ==== 處理信令訊息 ====
+    // ==== 處理信令 ====
     async function handleSignalMessage(fromUid, fromNickname, signal) {
         if (!signal) return;
 
@@ -447,19 +446,19 @@
                     }));
                 }
             } catch (e) {
-                console.error('處理 Offer 失敗:', e);
+                console.error('[Cobin] 處理 Offer 失敗:', e);
             }
         } else if (signal.type === 'answer') {
             try {
                 await pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
             } catch (e) {
-                console.error('處理 Answer 失敗:', e);
+                console.error('[Cobin] 處理 Answer 失敗:', e);
             }
         } else if (signal.type === 'candidate') {
             try {
                 await pc.addIceCandidate(new RTCIceCandidate(signal.candidate));
             } catch (e) {
-                console.error('加入 Candidate 失敗:', e);
+                console.error('[Cobin] 加入 Candidate 失敗:', e);
             }
         }
     }
@@ -493,7 +492,7 @@
         return tile;
     }
 
-    // ==== 遠端媒體狀態更新 ====
+    // ==== 遠端媒體狀態 ====
     function handleUserMediaState(uid, mic, camera) {
         const peer = peers[uid];
         if (!peer) return;
@@ -535,7 +534,7 @@
 
                 showToast('🖥️ 已開啟螢幕分享');
             } catch (err) {
-                console.error('螢幕分享錯誤:', err);
+                console.error('[Cobin] 螢幕分享失敗:', err);
             }
         } else {
             stopScreenShare();
@@ -566,7 +565,7 @@
         showToast('⏹️ 螢幕分享已結束');
     }
 
-    // ==== 控制列：2. 邀請連結 ====
+    // ==== 控制列：2. 複製邀請連結 ====
     window.copyInviteLink = function() {
         const url = `${window.location.origin}${window.location.pathname}?room=${currentRoomId || 'room-1'}`;
         navigator.clipboard.writeText(url).then(() => {
@@ -576,7 +575,7 @@
         });
     };
 
-    // ==== 控制列：3. 鏡頭開關 ====
+    // ==== 控制列：3. 鏡頭切換 ====
     window.toggleCamera = function() {
         if (!localStream) return;
         isCameraEnabled = !isCameraEnabled;
@@ -607,7 +606,7 @@
         }
     }
 
-    // ==== 控制列：4. 麥克風開關 ====
+    // ==== 控制列：4. 麥克風切換 ====
     window.toggleMic = function() {
         if (!localStream) return;
         isMicEnabled = !isMicEnabled;
@@ -706,7 +705,7 @@
         }, 1000);
     }
 
-    // ==== 說話波形檢測 ====
+    // ==== 說話波形分析 ====
     function setupLocalAudioAnalysis(stream) {
         try {
             if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
