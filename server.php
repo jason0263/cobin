@@ -9,7 +9,7 @@ if (file_exists(__DIR__ . '/vendor/autoload.php')) {
 
 use Workerman\Worker;
 
-// WebSocket 信令伺服器 (支援多房間與 WebRTC P2P Mesh 通話)
+// WebSocket 信令伺服器 (支援 3 個房間與 WebRTC P2P Mesh 通話)
 $ws_worker = new Worker("websocket://0.0.0.0:8080");
 $ws_worker->count = 1;
 
@@ -23,7 +23,7 @@ $roomNames = [
 ];
 
 /**
- * 計算並廣播當前所有房間的成員資訊給所有連線中的客戶端
+ * 廣播當前所有房間的成員資訊給所有客戶端
  */
 function broadcastRoomsStatus($clients, $roomNames) {
     $roomsStatus = [];
@@ -53,18 +53,31 @@ function broadcastRoomsStatus($clients, $roomNames) {
     ]);
 
     foreach ($clients as $c) {
-        $c->send($payload);
+        try {
+            $c->send($payload);
+        } catch (\Throwable $e) {}
     }
 }
 
-$ws_worker->onConnect = function($connection) use (&$clients) {
+// 當 WebSocket 握手成功建立時觸發 (最穩定可靠的時機)
+$ws_worker->onWebSocketConnect = function($connection, $http_header) use (&$clients, $roomNames) {
     $connection->uid = uniqid();
     $connection->roomId = null;
     $connection->nickname = '用戶 ' . substr($connection->uid, -4);
     $connection->micState = true;
     $connection->cameraState = true;
     $clients[$connection->uid] = $connection;
-    echo "[連線] UID: {$connection->uid}\n";
+
+    echo "[WebSocket 連線成功] UID: {$connection->uid}\n";
+
+    // 主動回傳初始化資訊與房間狀態給客戶端
+    $connection->send(json_encode([
+        'type' => 'init-ack',
+        'uid' => $connection->uid,
+        'nickname' => $connection->nickname
+    ]));
+
+    broadcastRoomsStatus($clients, $roomNames);
 };
 
 $ws_worker->onMessage = function($connection, $data) use (&$clients, $roomNames) {
@@ -83,12 +96,6 @@ $ws_worker->onMessage = function($connection, $data) use (&$clients, $roomNames)
             if (!empty($msg['avatar'])) {
                 $connection->avatar = $msg['avatar'];
             }
-            // 回傳自己的 UID 與所有房間資訊
-            $connection->send(json_encode([
-                'type' => 'init-ack',
-                'uid' => $connection->uid,
-                'nickname' => $connection->nickname
-            ]));
             broadcastRoomsStatus($clients, $roomNames);
             break;
 
@@ -133,7 +140,7 @@ $ws_worker->onMessage = function($connection, $data) use (&$clients, $roomNames)
                 }
             }
 
-            // 發送已加入房間訊息給自己
+            // 發送已加入房間訊息給自己 (包含房間內已有成員)
             $connection->send(json_encode([
                 'type' => 'joined-room',
                 'roomId' => $targetRoomId,
@@ -226,22 +233,24 @@ $ws_worker->onMessage = function($connection, $data) use (&$clients, $roomNames)
 };
 
 $ws_worker->onClose = function($connection) use (&$clients, $roomNames) {
-    if (!empty($connection->roomId)) {
-        $rId = $connection->roomId;
-        foreach ($clients as $c) {
-            if ($c !== $connection && $c->roomId === $rId) {
-                $c->send(json_encode([
-                    'type' => 'user-left',
-                    'uid' => $connection->uid,
-                    'roomId' => $rId
-                ]));
+    if (!empty($connection->uid) && isset($clients[$connection->uid])) {
+        if (!empty($connection->roomId)) {
+            $rId = $connection->roomId;
+            foreach ($clients as $c) {
+                if ($c !== $connection && $c->roomId === $rId) {
+                    $c->send(json_encode([
+                        'type' => 'user-left',
+                        'uid' => $connection->uid,
+                        'roomId' => $rId
+                    ]));
+                }
             }
         }
-    }
 
-    unset($clients[$connection->uid]);
-    broadcastRoomsStatus($clients, $roomNames);
-    echo "[斷線] UID: {$connection->uid}\n";
+        unset($clients[$connection->uid]);
+        broadcastRoomsStatus($clients, $roomNames);
+        echo "[斷線] UID: {$connection->uid}\n";
+    }
 };
 
 Worker::runAll();
