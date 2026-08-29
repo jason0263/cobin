@@ -721,8 +721,16 @@
 
             tile.innerHTML = `
                 <div class="tile-actions-bar">
+                    <button class="tile-btn btn-exit-fullscreen" onclick="toggleTileFullscreen('tile-${uid}', event)">
+                        ✕ 退出全螢幕
+                    </button>
                     <button class="tile-btn" title="放大至大屏幕" onclick="toggleSpotlight('${uid}', event)">
                         <svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
+                        <span>聚焦</span>
+                    </button>
+                    <button class="tile-btn" title="劇院全螢幕" onclick="toggleTileFullscreen('tile-${uid}', event)">
+                        <svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
+                        <span>全螢幕</span>
                     </button>
                 </div>
                 <video autoplay playsinline></video>
@@ -798,23 +806,51 @@
         }
     };
 
+    // ==== 🎬 真正 100% 滿版劇院全螢幕模式 (手機 / 電腦無縫適配) ====
     window.toggleTileFullscreen = function(tileId, event) {
         if (event) event.stopPropagation();
         const elem = document.getElementById(tileId);
         if (!elem) return;
 
-        if (!document.fullscreenElement) {
-            if (elem.requestFullscreen) {
-                elem.requestFullscreen();
-            } else if (elem.webkitRequestFullscreen) {
-                elem.webkitRequestFullscreen();
+        const isCurrentlyFullscreen = elem.classList.contains('cinema-fullscreen');
+
+        if (isCurrentlyFullscreen) {
+            // 退出全螢幕
+            elem.classList.remove('cinema-fullscreen');
+            if (document.fullscreenElement && document.exitFullscreen) {
+                document.exitFullscreen().catch(() => {});
             }
+            showToast('已退出全螢幕');
         } else {
-            if (document.exitFullscreen) {
-                document.exitFullscreen();
+            // 進入全螢幕 (先清除其他視訊的全螢幕)
+            document.querySelectorAll('.video-tile').forEach(t => t.classList.remove('cinema-fullscreen'));
+            elem.classList.add('cinema-fullscreen');
+
+            // 嘗試原生瀏覽器全螢幕
+            if (elem.requestFullscreen) {
+                elem.requestFullscreen().catch(() => {});
+            } else if (elem.webkitRequestFullscreen) {
+                elem.webkitRequestFullscreen().catch(() => {});
             }
+
+            // iOS Safari 原生視訊全螢幕支援
+            const video = elem.querySelector('video');
+            if (video && video.webkitEnterFullscreen && /iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+                try { video.webkitEnterFullscreen(); } catch (e) {}
+            }
+
+            showToast('🎬 已進入劇院全螢幕 (點擊右上角退出)');
         }
     };
+
+    // 鍵盤 ESC 退出全螢幕
+    window.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            document.querySelectorAll('.video-tile.cinema-fullscreen').forEach(t => {
+                t.classList.remove('cinema-fullscreen');
+            });
+        }
+    });
 
     function updateStageLayout() {
         if (!videoGrid) return;
