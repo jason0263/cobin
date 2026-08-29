@@ -3,13 +3,21 @@
 (() => {
     // ==== 基礎變數與狀態 ====
     const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsHost = location.hostname || 'localhost';
+    // 若在本地環境 (file:// 或 localhost)，強制使用 127.0.0.1 避免 Windows IPv6 ::1 解析失敗
+    let host = location.hostname;
+    if (!host || host === 'localhost' || host === '') {
+        host = '127.0.0.1';
+    }
     const wsPort = '8080';
-    const wsUrl = `${wsProtocol}//${wsHost}:${wsPort}`;
+    const wsUrl = `${wsProtocol}//${host}:${wsPort}`;
 
     let ws = null;
     let myUid = null;
-    let myNickname = localStorage.getItem('cobin_nickname') || '用戶 ' + Math.floor(1000 + Math.random() * 9000);
+    let myNickname = '用戶 ' + Math.floor(1000 + Math.random() * 9000);
+    try {
+        const saved = localStorage.getItem('cobin_nickname');
+        if (saved) myNickname = saved;
+    } catch (e) {}
     let currentRoomId = null;
     let currentRoomName = '';
 
@@ -85,8 +93,9 @@
         ws = new WebSocket(wsUrl);
 
         ws.addEventListener('open', () => {
-            wsStatusTag.textContent = '已連線';
+            wsStatusTag.textContent = '🟢 已連線';
             wsStatusTag.style.color = 'var(--accent-green)';
+            console.log('WebSocket 連線成功:', wsUrl);
             // 發送初始資訊
             ws.send(JSON.stringify({
                 type: 'init',
@@ -102,10 +111,10 @@
         });
 
         ws.addEventListener('close', () => {
-            wsStatusTag.textContent = '未連線';
+            wsStatusTag.textContent = '🔴 未連線 (重試中)';
             wsStatusTag.style.color = 'var(--accent-red)';
-            // 3 秒後自動重連
-            setTimeout(initWebSocket, 3000);
+            // 2 秒後自動重連
+            setTimeout(initWebSocket, 2000);
         });
 
         ws.addEventListener('error', (err) => {
