@@ -1,9 +1,8 @@
-// app.js - Cobin Voice & Video (多房間 WebRTC Mesh 即時通話邏輯)
+// app.js - Cobin Voice & Video (點擊即入、極速通話)
 
 (() => {
     // ==== 基礎變數與狀態 ====
     const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    // 若在本地環境 (file:// 或 localhost)，強制使用 127.0.0.1 避免 Windows IPv6 ::1 解析失敗
     let host = location.hostname;
     if (!host || host === 'localhost' || host === '') {
         host = '127.0.0.1';
@@ -18,8 +17,10 @@
         const saved = localStorage.getItem('cobin_nickname');
         if (saved) myNickname = saved;
     } catch (e) {}
+
     let currentRoomId = null;
     let currentRoomName = '';
+    let pendingRoomId = null; // 當 WebSocket 尚未連線時暫存的預備進入房間
 
     // 媒體狀態
     let localStream = null;
@@ -28,7 +29,7 @@
     let isCameraEnabled = true;
     let isScreenSharing = false;
 
-    // WebRTC PeerConnections: { [targetUid]: { pc, nickname, videoElement, audioAnalyser } }
+    // WebRTC PeerConnections: { [targetUid]: { pc, nickname, videoElement } }
     const peers = {};
 
     // 通話計時
@@ -78,6 +79,13 @@
     const nicknameInput = document.getElementById('nicknameInput');
     const toastMsg = document.getElementById('toastMsg');
 
+    // 房間名稱對照
+    const roomNameMap = {
+        'room-1': '語音大廳 1',
+        'room-2': '遊戲開黑 2',
+        'room-3': '私人會議 3'
+    };
+
     // ==== 初始化使用者介面 ====
     function updateMyProfileUI() {
         myNicknameText.textContent = myNickname;
@@ -90,35 +98,48 @@
 
     // ==== WebSocket 連線 ====
     function initWebSocket() {
-        ws = new WebSocket(wsUrl);
+        try {
+            ws = new WebSocket(wsUrl);
+        } catch (e) {
+            console.error('WebSocket 初始化失敗:', e);
+            wsStatusTag.textContent = '🔴 離線模式';
+            return;
+        }
 
         ws.addEventListener('open', () => {
             wsStatusTag.textContent = '🟢 已連線';
             wsStatusTag.style.color = 'var(--accent-green)';
             console.log('WebSocket 連線成功:', wsUrl);
-            // 發送初始資訊
+
+            // 發送初始使用者資訊
             ws.send(JSON.stringify({
                 type: 'init',
                 nickname: myNickname
             }));
 
-            // 檢查 URL 是否有 room 參數，自動加入
-            const urlParams = new URLSearchParams(window.location.search);
-            const targetRoom = urlParams.get('room');
-            if (targetRoom && ['room-1', 'room-2', 'room-3'].includes(targetRoom)) {
-                joinRoom(targetRoom);
+            // 如果有等待進入的房間，立即送出加入信令
+            if (pendingRoomId) {
+                const target = pendingRoomId;
+                pendingRoomId = null;
+                sendJoinRoomSignal(target);
+            } else {
+                // 檢查 URL 參數
+                const urlParams = new URLSearchParams(window.location.search);
+                const targetRoom = urlParams.get('room');
+                if (targetRoom && roomNameMap[targetRoom]) {
+                    joinRoom(targetRoom);
+                }
             }
         });
 
         ws.addEventListener('close', () => {
             wsStatusTag.textContent = '🔴 未連線 (重試中)';
             wsStatusTag.style.color = 'var(--accent-red)';
-            // 2 秒後自動重連
-            setTimeout(initWebSocket, 2000);
+            setTimeout(initWebSocket, 2500);
         });
 
         ws.addEventListener('error', (err) => {
-            console.error('WebSocket Error:', err);
+            console.error('WebSocket 錯誤:', err);
         });
 
         ws.addEventListener('message', async (event) => {
@@ -139,7 +160,7 @@
                     break;
 
                 case 'joined-room':
-                    handleJoinedRoom(data);
+                    handleJoinedRoomSuccess(data);
                     break;
 
                 case 'user-joined':
@@ -167,7 +188,7 @@
 
     initWebSocket();
 
-    // ==== 渲染左側房間列表狀態 ====
+    // ==== 渲染房間在線清單 ====
     function renderRoomsStatus(rooms) {
         for (const roomId in rooms) {
             const roomData = rooms[roomId];
@@ -192,38 +213,55 @@
             }
         }
 
-        // 更新頂部人數
         if (currentRoomId && rooms[currentRoomId]) {
             const count = rooms[currentRoomId].users.length;
             roomParticipantsCount.textContent = `${count} 位成員在線`;
         }
     }
 
-    // ==== 加入房間邏輯 ====
+    // ==== 核心：使用者點擊房間立即進入通話 ====
     window.joinRoom = async function(roomId) {
-        if (currentRoomId === roomId) return; // 已經在該房間
+        if (currentRoomId === roomId) return; // 已在該房間
 
-        // 若已在其他房間，先離開
+        // 若已在其他房間，先離開舊通話
         if (currentRoomId) {
             await leaveRoomInternal();
         }
 
         currentRoomId = roomId;
+        currentRoomName = roomNameMap[roomId] || roomId;
+        currentRoomNameTitle.textContent = currentRoomName;
 
-        // 醒目切換邊欄 Active 樣式
+        // 1. 立即切換 UI (零等待顯示通話介面)
         document.querySelectorAll('.room-item').forEach(el => el.classList.remove('active'));
         const activeItem = document.getElementById(`room-item-${roomId}`);
         if (activeItem) activeItem.classList.add('active');
 
-        // 取得本地攝影機與麥克風
+        lobbyScreen.style.display = 'none';
+        stageHeader.style.display = 'flex';
+        videoGrid.style.display = 'grid';
+        floatingActionBar.classList.remove('hidden');
+        startCallTimer();
+        adjustGridColumns();
+
+        // 2. 立即獲取並播放本端影像/音訊
         try {
             await initLocalMedia();
         } catch (err) {
-            console.error('取得媒體權限失敗:', err);
-            showToast('⚠️ 無法存取麥克風/鏡頭，請確認瀏覽器權限');
+            console.warn('媒體存取受限:', err);
+            showToast('⚠️ 請允許瀏覽器使用鏡頭與麥克風');
         }
 
-        // 發送加入房間信令
+        // 3. 發送加入房間信令
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            sendJoinRoomSignal(roomId);
+        } else {
+            pendingRoomId = roomId;
+            showToast('🚀 正在連接通話伺服器...');
+        }
+    };
+
+    function sendJoinRoomSignal(roomId) {
         ws.send(JSON.stringify({
             type: 'join-room',
             roomId: roomId,
@@ -231,9 +269,9 @@
             micState: isMicEnabled,
             cameraState: isCameraEnabled
         }));
-    };
+    }
 
-    // ==== 本地媒體初始化 ====
+    // ==== 初始化本地攝影機與麥克風 ====
     async function initLocalMedia() {
         if (!localStream) {
             try {
@@ -242,59 +280,58 @@
                     audio: true
                 });
             } catch (e) {
-                // 如果沒有鏡頭或鏡頭失敗，嘗試只開音訊
-                localStream = await navigator.mediaDevices.getUserMedia({
-                    video: false,
-                    audio: true
-                });
-                isCameraEnabled = false;
+                // 如果沒有攝影機或拒絕鏡頭，嘗試僅獲取音訊
+                try {
+                    localStream = await navigator.mediaDevices.getUserMedia({
+                        video: false,
+                        audio: true
+                    });
+                    isCameraEnabled = false;
+                } catch (e2) {
+                    console.error('無法取得任何媒體串流', e2);
+                }
             }
 
-            localVideo.srcObject = localStream;
-            setupLocalAudioAnalysis(localStream);
+            if (localStream) {
+                localVideo.srcObject = localStream;
+                setupLocalAudioAnalysis(localStream);
+            }
         }
 
-        // 套用目前開關設定
-        localStream.getAudioTracks().forEach(t => t.enabled = isMicEnabled);
-        localStream.getVideoTracks().forEach(t => t.enabled = isCameraEnabled);
+        if (localStream) {
+            localStream.getAudioTracks().forEach(t => t.enabled = isMicEnabled);
+            localStream.getVideoTracks().forEach(t => t.enabled = isCameraEnabled);
+        }
 
         updateCameraUI();
         updateMicUI();
     }
 
-    // ==== 處理已成功加入房間 ====
-    async function handleJoinedRoom(data) {
-        currentRoomName = data.roomName;
+    // ==== 伺服器確認加入房間成功 (建立與現有成員的連線) ====
+    async function handleJoinedRoomSuccess(data) {
+        currentRoomName = data.roomName || currentRoomName;
         currentRoomNameTitle.textContent = currentRoomName;
 
-        // 切換主畫面：隱藏大廳，顯示視訊網格與懸浮控制條
-        lobbyScreen.style.display = 'none';
-        stageHeader.style.display = 'flex';
-        videoGrid.style.display = 'grid';
-        floatingActionBar.classList.remove('hidden');
-
-        startCallTimer();
-        adjustGridColumns();
-
-        // 與同房間已有使用者發起 WebRTC 連線 (Mesh 架構)
         const existingUsers = data.users || [];
+        roomParticipantsCount.textContent = `${existingUsers.length + 1} 位成員在線`;
+
+        // 針對同房間已有的使用者發起 WebRTC Offer
         for (const user of existingUsers) {
             await createPeerConnection(user.uid, user.nickname, true);
         }
     }
 
-    // ==== 處理其他使用者加入房間 ====
+    // ==== 新使用者加入房間 ====
     async function handleUserJoined(user) {
         if (user.uid === myUid) return;
         showToast(`👋 ${user.nickname} 加入了通話`);
-        // 等待對方發起 offer，或在此建立連線佔位 DOM
         ensureUserVideoTile(user.uid, user.nickname);
     }
 
-    // ==== 處理其他使用者離開房間 ====
+    // ==== 使用者離開房間 ====
     function handleUserLeft(uid) {
         if (peers[uid]) {
-            showToast(`🏃 ${peers[uid].nickname || '成員'} 離開了通話`);
+            showToast(`🏃 ${peers[uid].nickname || '成員'} 離開了房間`);
             if (peers[uid].pc) {
                 peers[uid].pc.close();
             }
@@ -306,7 +343,7 @@
         }
     }
 
-    // ==== 建立 RTCPeerConnection (P2P Mesh) ====
+    // ==== 建立 RTCPeerConnection (Mesh P2P 架構) ====
     async function createPeerConnection(targetUid, targetNickname, isInitiator) {
         if (peers[targetUid] && peers[targetUid].pc) {
             return peers[targetUid].pc;
@@ -324,14 +361,14 @@
             micIcon: tile.querySelector('.mic-status-icon')
         };
 
-        // 加入本地 Tracks
+        // 加入本地 tracks
         if (localStream) {
             localStream.getTracks().forEach(track => {
                 pc.addTrack(track, localStream);
             });
         }
 
-        // 遠端 Track 到達事件
+        // 遠端 Track 到達
         pc.ontrack = (event) => {
             const remoteStream = event.streams[0];
             const peerObj = peers[targetUid];
@@ -341,9 +378,9 @@
             }
         };
 
-        // ICE Candidate 收集並透過 WebSocket 發送給目標
+        // ICE Candidate 交換
         pc.onicecandidate = (event) => {
-            if (event.candidate) {
+            if (event.candidate && ws && ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({
                     type: 'signal',
                     targetUid: targetUid,
@@ -355,26 +392,27 @@
             }
         };
 
-        // 連線狀態監聽
         pc.onconnectionstatechange = () => {
             if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
                 handleUserLeft(targetUid);
             }
         };
 
-        // 若為主動發起者，建立 Offer
+        // 主動發起 Offer
         if (isInitiator) {
             try {
                 const offer = await pc.createOffer();
                 await pc.setLocalDescription(offer);
-                ws.send(JSON.stringify({
-                    type: 'signal',
-                    targetUid: targetUid,
-                    signal: {
-                        type: 'offer',
-                        sdp: pc.localDescription
-                    }
-                }));
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({
+                        type: 'signal',
+                        targetUid: targetUid,
+                        signal: {
+                            type: 'offer',
+                            sdp: pc.localDescription
+                        }
+                    }));
+                }
             } catch (err) {
                 console.error('建立 Offer 失敗:', err);
             }
@@ -384,7 +422,7 @@
         return pc;
     }
 
-    // ==== 處理信令訊息 (Offer / Answer / Candidate) ====
+    // ==== 處理信令訊息 ====
     async function handleSignalMessage(fromUid, fromNickname, signal) {
         if (!signal) return;
 
@@ -398,14 +436,16 @@
                 await pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
                 const answer = await pc.createAnswer();
                 await pc.setLocalDescription(answer);
-                ws.send(JSON.stringify({
-                    type: 'signal',
-                    targetUid: fromUid,
-                    signal: {
-                        type: 'answer',
-                        sdp: pc.localDescription
-                    }
-                }));
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({
+                        type: 'signal',
+                        targetUid: fromUid,
+                        signal: {
+                            type: 'answer',
+                            sdp: pc.localDescription
+                        }
+                    }));
+                }
             } catch (e) {
                 console.error('處理 Offer 失敗:', e);
             }
@@ -419,12 +459,12 @@
             try {
                 await pc.addIceCandidate(new RTCIceCandidate(signal.candidate));
             } catch (e) {
-                console.error('加入 ICE Candidate 失敗:', e);
+                console.error('加入 Candidate 失敗:', e);
             }
         }
     }
 
-    // ==== 動態建立 / 取得遠端視訊 Tile ====
+    // ==== 建立遠端視訊 Tile ====
     function ensureUserVideoTile(uid, nickname) {
         let tile = document.getElementById(`tile-${uid}`);
         if (!tile) {
@@ -470,16 +510,13 @@
         }
     }
 
-    // ==== 浮動控制列功能 ====
-
-    // 1. 螢幕分享 (toggleScreenShare)
+    // ==== 控制列：1. 螢幕分享 ====
     window.toggleScreenShare = async function() {
         if (!isScreenSharing) {
             try {
                 screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
                 const screenTrack = screenStream.getVideoTracks()[0];
 
-                // 替換所有 peerConnection 中的 video track
                 for (const uid in peers) {
                     const sender = peers[uid].pc.getSenders().find(s => s.track && s.track.kind === 'video');
                     if (sender) {
@@ -492,14 +529,13 @@
                 isScreenSharing = true;
                 btnShareScreen.classList.add('active');
 
-                // 使用者點選瀏覽器內建「停止共用」時的監聽
                 screenTrack.onended = () => {
                     stopScreenShare();
                 };
 
-                showToast('🖥️ 已開始分享螢幕');
+                showToast('🖥️ 已開啟螢幕分享');
             } catch (err) {
-                console.error('螢幕分享失敗:', err);
+                console.error('螢幕分享錯誤:', err);
             }
         } else {
             stopScreenShare();
@@ -513,7 +549,6 @@
             screenStream = null;
         }
 
-        // 恢復本地攝影機
         if (localStream) {
             const camTrack = localStream.getVideoTracks()[0];
             for (const uid in peers) {
@@ -528,20 +563,20 @@
         localVideoTile.classList.remove('is-screen');
         isScreenSharing = false;
         btnShareScreen.classList.remove('active');
-        showToast('⏹️ 已停止螢幕分享');
+        showToast('⏹️ 螢幕分享已結束');
     }
 
-    // 2. 邀請成員 / 複製房間連結
+    // ==== 控制列：2. 邀請連結 ====
     window.copyInviteLink = function() {
         const url = `${window.location.origin}${window.location.pathname}?room=${currentRoomId || 'room-1'}`;
         navigator.clipboard.writeText(url).then(() => {
-            showToast('🔗 已複製房間邀請連結，可直接分享給好友！');
+            showToast('🔗 已複製房間連結，發給好友即可進入！');
         }).catch(() => {
-            showToast('🔗 邀請連結: ' + url);
+            showToast('🔗 連結: ' + url);
         });
     };
 
-    // 3. 鏡頭切換 (toggleCamera)
+    // ==== 控制列：3. 鏡頭開關 ====
     window.toggleCamera = function() {
         if (!localStream) return;
         isCameraEnabled = !isCameraEnabled;
@@ -549,7 +584,6 @@
         localStream.getVideoTracks().forEach(t => t.enabled = isCameraEnabled);
         updateCameraUI();
 
-        // 廣播媒體狀態給同房間其他成員
         if (ws && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({
                 type: 'media-state',
@@ -573,7 +607,7 @@
         }
     }
 
-    // 4. 麥克風切換 (toggleMic)
+    // ==== 控制列：4. 麥克風開關 ====
     window.toggleMic = function() {
         if (!localStream) return;
         isMicEnabled = !isMicEnabled;
@@ -581,7 +615,6 @@
         localStream.getAudioTracks().forEach(t => t.enabled = isMicEnabled);
         updateMicUI();
 
-        // 廣播媒體狀態
         if (ws && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({
                 type: 'media-state',
@@ -605,10 +638,10 @@
         }
     }
 
-    // 5. 掛斷 / 離開房間
+    // ==== 控制列：5. 紅色掛斷 / 離開房間 ====
     window.leaveRoom = async function() {
         await leaveRoomInternal();
-        showToast('📞 已結束通話並離開房間');
+        showToast('📞 已退出通話');
     };
 
     async function leaveRoomInternal() {
@@ -621,24 +654,20 @@
         cleanupCallState();
     }
 
-    // 清理通話狀態與還原 UI
     function cleanupCallState() {
         stopScreenShare();
 
-        // 停止本地媒體
         if (localStream) {
             localStream.getTracks().forEach(t => t.stop());
             localStream = null;
         }
 
-        // 關閉並清理所有 PeerConnections
         for (const uid in peers) {
             if (peers[uid].pc) peers[uid].pc.close();
             if (peers[uid].videoTile) peers[uid].videoTile.remove();
             delete peers[uid];
         }
 
-        // 停止計時器
         if (callTimerInterval) {
             clearInterval(callTimerInterval);
             callTimerInterval = null;
@@ -647,7 +676,6 @@
         currentRoomId = null;
         currentRoomName = '';
 
-        // 重設 UI
         document.querySelectorAll('.room-item').forEach(el => el.classList.remove('active'));
         stageHeader.style.display = 'none';
         videoGrid.style.display = 'none';
@@ -655,9 +683,9 @@
         lobbyScreen.style.display = 'flex';
     }
 
-    // ==== 視訊 Grid 自適應排版 ====
+    // ==== 視訊網格排版 ====
     function adjustGridColumns() {
-        const totalUsers = Object.keys(peers).length + 1; // +1 本地
+        const totalUsers = Object.keys(peers).length + 1;
         if (totalUsers === 1) {
             videoGrid.className = 'video-grid-container single-user';
         } else {
@@ -678,7 +706,7 @@
         }, 1000);
     }
 
-    // ==== 說話指示器 (Speaking Indicator) 聲音分析 ====
+    // ==== 說話波形檢測 ====
     function setupLocalAudioAnalysis(stream) {
         try {
             if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -746,7 +774,7 @@
         const val = nicknameInput.value.trim();
         if (val) {
             myNickname = val;
-            localStorage.setItem('cobin_nickname', myNickname);
+            try { localStorage.setItem('cobin_nickname', myNickname); } catch (e) {}
             updateMyProfileUI();
             if (ws && ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({
@@ -763,7 +791,7 @@
         if (e.key === 'Enter') saveNickname();
     });
 
-    // ==== Toast 提示函式 ====
+    // ==== Toast 提示 ====
     let toastTimeout = null;
     function showToast(text) {
         toastMsg.textContent = text;
@@ -774,7 +802,6 @@
         }, 2800);
     }
 
-    // 輔助函式：跳脫 HTML 避免 XSS
     function escapeHtml(str) {
         if (!str) return '';
         return String(str).replace(/[&<>"']/g, (s) => ({
