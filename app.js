@@ -120,8 +120,16 @@
 
         ws.onopen = () => {
             console.log(`[Cobin] ✅ WebSocket 成功連線 (${wsUrl})`);
-            wsStatusTag.textContent = '🟢 已連線';
-            wsStatusTag.style.color = 'var(--accent-green)';
+            if (wsStatusTag) {
+                wsStatusTag.textContent = '🟢 已連線';
+                wsStatusTag.style.color = 'var(--accent-green)';
+            }
+            const globalText = document.getElementById('globalStatusText');
+            if (globalText) {
+                globalText.textContent = '🟢 伺服器在線';
+                globalText.parentElement.style.borderColor = 'rgba(35, 165, 90, 0.4)';
+                globalText.parentElement.style.color = 'var(--accent-green)';
+            }
 
             // 送出暱稱初始化
             ws.send(JSON.stringify({
@@ -139,9 +147,17 @@
 
         ws.onclose = (event) => {
             console.warn(`[Cobin] ⚠️ WebSocket 斷線 (代碼: ${event.code})`);
-            wsStatusTag.textContent = '🔴 未連線';
-            wsStatusTag.style.color = 'var(--accent-red)';
-            setTimeout(initWebSocket, 2500);
+            if (wsStatusTag) {
+                wsStatusTag.textContent = '🔴 未連線';
+                wsStatusTag.style.color = 'var(--accent-red)';
+            }
+            const globalText = document.getElementById('globalStatusText');
+            if (globalText) {
+                globalText.textContent = '🔴 連線中斷 (重試中)';
+                globalText.parentElement.style.borderColor = 'rgba(242, 63, 67, 0.4)';
+                globalText.parentElement.style.color = 'var(--accent-red)';
+            }
+            setTimeout(initWebSocket, 2000);
         };
 
         ws.onerror = (err) => {

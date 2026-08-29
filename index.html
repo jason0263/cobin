@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-    <title>Cobin Voice & Video - 跨平台即時通話</title>
+    <title>Cobin Voice & Video - 即時通話</title>
     <style>
         :root {
             --bg-base: #0c0e14;
@@ -32,7 +32,7 @@
             --radius-full: 9999px;
             
             --shadow-lg: 0 12px 36px rgba(0, 0, 0, 0.5);
-            --font: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            --font: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             --safe-bottom: env(safe-area-inset-bottom, 12px);
         }
 
@@ -54,7 +54,7 @@
             display: flex;
         }
 
-        /* 伺服器最左圖示欄 */
+        /* 伺服器圖示欄 */
         .server-rail {
             width: 72px;
             background: #090a0f;
@@ -98,7 +98,7 @@
             border-radius: 1px;
         }
 
-        /* 頻道與房間側邊欄 */
+        /* 側邊欄 */
         .sidebar {
             width: 260px;
             background: var(--bg-sidebar);
@@ -280,7 +280,6 @@
             border: 2px solid #0e111a;
         }
 
-        /* 手機端側邊欄遮罩 */
         .sidebar-backdrop {
             display: none;
             position: fixed;
@@ -290,7 +289,7 @@
             z-index: 15;
         }
 
-        /* 主通話區域 */
+        /* 主通話舞台 */
         .main-stage {
             flex: 1;
             display: flex;
@@ -299,6 +298,32 @@
             background: radial-gradient(circle at center 40%, #151b2a 0%, #0c0e14 100%);
             overflow: hidden;
             height: 100%;
+        }
+
+        /* 頂部導覽列 (全局永遠顯示狀態) */
+        .global-top-bar {
+            position: absolute;
+            top: 14px;
+            right: 16px;
+            z-index: 50;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .global-status-pill {
+            background: rgba(12, 14, 20, 0.75);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border);
+            padding: 6px 14px;
+            border-radius: var(--radius-full);
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--accent-green);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.3);
         }
 
         .stage-header {
@@ -767,7 +792,7 @@
 </head>
 <body>
 
-    <!-- 最左側伺服器圖示欄 (桌面端) -->
+    <!-- 伺服器圖示欄 (桌面端) -->
     <aside class="server-rail">
         <div class="server-icon active" title="Cobin 通話">
             <svg viewBox="0 0 24 24">
@@ -777,7 +802,7 @@
         <div class="server-divider"></div>
     </aside>
 
-    <!-- 手機端側邊欄遮罩 -->
+    <!-- 手機側邊欄遮罩 -->
     <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="toggleMobileSidebar()"></div>
 
     <!-- 頻道與房間側邊欄 -->
@@ -785,15 +810,14 @@
         <div class="sidebar-header">
             <div style="display:flex; align-items:center;">
                 <span class="status-badge-dot"></span>
-                <span>語音房間清單</span>
+                <span>語音房間</span>
             </div>
-            <div id="wsStatusTag" style="font-size:11px; color:var(--text-muted);">連線中...</div>
+            <div id="wsStatusTag" style="font-size:11px; color:var(--accent-green); font-weight:600;">🟢 已連線</div>
         </div>
 
         <div class="channels-list">
             <div class="category-title">🔊 語音房間 (點擊進入)</div>
 
-            <!-- 房間 1 -->
             <div class="room-item" id="room-item-room-1" onclick="handleRoomClick('room-1')">
                 <div class="room-main-row">
                     <div class="room-info">
@@ -807,7 +831,6 @@
                 <div class="room-users-sublist" id="users-room-1"></div>
             </div>
 
-            <!-- 房間 2 -->
             <div class="room-item" id="room-item-room-2" onclick="handleRoomClick('room-2')">
                 <div class="room-main-row">
                     <div class="room-info">
@@ -821,7 +844,6 @@
                 <div class="room-users-sublist" id="users-room-2"></div>
             </div>
 
-            <!-- 房間 3 -->
             <div class="room-item" id="room-item-room-3" onclick="handleRoomClick('room-3')">
                 <div class="room-main-row">
                     <div class="room-info">
@@ -849,7 +871,15 @@
 
     <!-- 主通話舞台 -->
     <main class="main-stage">
-        <!-- 頂部標題列 -->
+        <!-- 右上角全局連線狀態燈 -->
+        <div class="global-top-bar">
+            <div class="global-status-pill" id="globalStatusPill">
+                <span class="status-badge-dot"></span>
+                <span id="globalStatusText">🟢 伺服器在線</span>
+            </div>
+        </div>
+
+        <!-- 頂部通話標題列 -->
         <header class="stage-header" id="stageHeader" style="display:none;">
             <div class="stage-room-title">
                 <button class="btn-menu-mobile" onclick="toggleMobileSidebar()">
@@ -864,7 +894,7 @@
             <div id="roomParticipantsCount" style="font-size:12px; color:var(--text-secondary);">1 人在線</div>
         </header>
 
-        <!-- 大廳歡迎畫面 -->
+        <!-- 大廳畫面 -->
         <section class="lobby-screen" id="lobbyScreen">
             <div class="lobby-icon-box">
                 <svg width="40" height="40" viewBox="0 0 24 24" fill="currentColor">
@@ -872,7 +902,7 @@
                 </svg>
             </div>
             <h2 class="lobby-title">加入語音與視訊通話</h2>
-            <p class="lobby-desc">支援手機與電腦跨裝置通話！點擊下方任一房間即可立即開始通話。</p>
+            <p class="lobby-desc">點擊下方任一房間即可立即開始通話，無須安裝任何外掛或軟體！</p>
             <div class="lobby-room-cards">
                 <div class="lobby-card" onclick="handleRoomClick('room-1')">
                     <span style="font-size:22px;">🔊</span>
@@ -900,7 +930,6 @@
 
         <!-- 視訊畫面區域 Video Grid -->
         <section class="video-grid-container" id="videoGrid" style="display:none;">
-            <!-- 本端視訊方塊 -->
             <div class="video-tile is-local" id="localVideoTile">
                 <video id="localVideo" autoplay muted playsinline webkit-playsinline></video>
                 <div class="avatar-placeholder" id="localAvatarPlaceholder" style="display:none;">
@@ -919,21 +948,18 @@
 
         <!-- 底部浮動通話按鈕條 -->
         <div class="floating-action-bar hidden" id="floatingActionBar">
-            <!-- 1. 螢幕分享 -->
             <button class="call-btn btn-screen" id="btnShareScreen" title="螢幕分享" onclick="toggleScreenShare()">
                 <svg viewBox="0 0 24 24">
                     <path d="M20 18c1.1 0 1.99-.9 1.99-2L22 5c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v11c0 1.1.9 2 2 2H0c0 1.1.9 2 2 2h20c1.1 0 2-.9 2-2h-4zM4 5h16v11H4V5zm8 14c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1z"/>
                 </svg>
             </button>
 
-            <!-- 2. 邀請成員 / 複製連結 (+👤) -->
             <button class="call-btn btn-invite" id="btnInvite" title="邀請好友" onclick="copyInviteLink()">
                 <svg viewBox="0 0 24 24">
                     <path d="M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
                 </svg>
             </button>
 
-            <!-- 3. 鏡頭切換 -->
             <button class="call-btn btn-camera" id="btnCamera" title="開關鏡頭" onclick="toggleCamera()">
                 <svg id="camIconOn" viewBox="0 0 24 24">
                     <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/>
@@ -943,7 +969,6 @@
                 </svg>
             </button>
 
-            <!-- 4. 麥克風開關 -->
             <button class="call-btn btn-mic" id="btnMic" title="開關麥克風" onclick="toggleMic()">
                 <svg id="micIconOn" viewBox="0 0 24 24">
                     <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
@@ -954,7 +979,6 @@
                 </svg>
             </button>
 
-            <!-- 5. 紅色掛斷按鈕 -->
             <button class="call-btn btn-hangup" id="btnHangup" title="結束通話" onclick="leaveRoom()">
                 <svg viewBox="0 0 24 24">
                     <path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.7.28-.28 0-.53-.11-.71-.29L.29 13.08c-.18-.17-.29-.42-.29-.7 0-.28.11-.53.29-.71C3.34 8.78 7.46 7 12 7s8.66 1.78 11.71 4.67c.18.18.29.43.29.71 0 .28-.11.53-.29.71l-2.48 2.48c-.18.18-.43.29-.71.29-.27 0-.52-.11-.7-.28-.79-.74-1.69-1.36-2.67-1.85-.33-.16-.56-.5-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z"/>
