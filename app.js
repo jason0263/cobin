@@ -810,6 +810,7 @@
                     localVideo.srcObject = screenStream;
                     localVideo.play().catch(() => {});
                 }
+                if (localAvatarPlaceholder) localAvatarPlaceholder.style.display = 'none';
                 if (localVideoTile) localVideoTile.classList.add('is-screen');
                 if (localScreenBadge) localScreenBadge.style.display = 'inline-block';
                 isScreenSharing = true;
@@ -864,7 +865,7 @@
         }
 
         if (localVideo) {
-            if (localStream) {
+            if (localStream && isCameraEnabled) {
                 localVideo.srcObject = localStream;
                 localVideo.play().catch(() => {});
             } else {
@@ -874,6 +875,9 @@
 
         if (localVideoTile) localVideoTile.classList.remove('is-screen');
         if (localScreenBadge) localScreenBadge.style.display = 'none';
+        if (!isCameraEnabled && localAvatarPlaceholder) {
+            localAvatarPlaceholder.style.display = 'flex';
+        }
         isScreenSharing = false;
         if (btnShareScreen) btnShareScreen.classList.remove('active');
 
