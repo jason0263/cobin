@@ -368,7 +368,7 @@
         updateMicUI();
     }
 
-    // ==== 伺服器確認加入房間 ====
+    // ==== 伺服器確認加入房間 (作為發起方建立連線) ====
     async function handleJoinedRoomSuccess(data) {
         currentRoomName = data.roomName || currentRoomName;
         if (currentRoomNameTitle) currentRoomNameTitle.textContent = currentRoomName;
@@ -378,16 +378,28 @@
             roomParticipantsCount.textContent = `${existingUsers.length + 1} 位成員在線`;
         }
 
+        // 確保本地媒體已獲取
+        if (!localStream) {
+            await initLocalMedia();
+        }
+
         for (const user of existingUsers) {
             await createPeerConnection(user.uid, user.nickname, true);
         }
     }
 
-    // ==== 新使用者加入房間 ====
+    // ==== 新使用者加入房間 (舊成員立即預先建立 PeerConnection 並注入本地音訊) ====
     async function handleUserJoined(user) {
         if (user.uid === myUid) return;
         showToast(`👋 ${user.nickname} 加入了房間`);
         ensureUserVideoTile(user.uid, user.nickname);
+
+        if (!localStream) {
+            await initLocalMedia();
+        }
+
+        // 舊成員立即建立 PeerConnection 注入本地麥克風 Track，確保 Answer 生成 sendrecv 雙向音訊
+        await createPeerConnection(user.uid, user.nickname, false);
     }
 
     // ==== 使用者離開房間 ====
