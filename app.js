@@ -1,4 +1,4 @@
-// app.js - Cobin Voice & Video (多房間 WebRTC 即時通話前端邏輯)
+// app.js - Cobin Voice & Video (多房間 WebRTC 即時通話完整前端邏輯)
 
 (() => {
     console.log('[Cobin] app.js 已載入');
@@ -6,20 +6,16 @@
     // ==== 動態解析 WebSocket 信令位址 ====
     // 支援：本地開發 (127.0.0.1:8080)、雲端部署 (Nginx /ws 反向代理)、自訂 ?ws= 參數
     const urlParams = new URLSearchParams(window.location.search);
-    const customWs = urlParams.get('ws'); // 支援自訂 ?ws=xxx 參數
+    const customWs = urlParams.get('ws');
 
     let wsUrl = '';
     if (customWs) {
-        // 手動指定 WebSocket 位址
         wsUrl = customWs.startsWith('ws') ? customWs : `ws://${customWs}`;
     } else if (location.protocol === 'file:' || location.hostname === '' || location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
-        // 本機開發模式：直連 Workerman 端口
         wsUrl = 'ws://127.0.0.1:8080';
     } else if (location.protocol === 'https:') {
-        // 雲端 HTTPS：使用 Nginx WSS 反向代理
         wsUrl = `wss://${location.host}/ws`;
     } else {
-        // 雲端 HTTP 或區域網路：使用 Nginx WS 反向代理
         wsUrl = `ws://${location.host}/ws`;
     }
 
@@ -42,7 +38,7 @@
     let isCameraEnabled = true;
     let isScreenSharing = false;
 
-    // WebRTC PeerConnections: { [targetUid]: { pc, nickname, videoElement } }
+    // WebRTC PeerConnections: { [targetUid]: { pc, nickname, videoTile, videoEl, avatarEl, micIcon, pendingCandidates } }
     const peers = {};
 
     // 通話計時
@@ -52,8 +48,25 @@
     // 音訊檢測 (Speaking Indicator)
     let audioContext = null;
 
+    // 大屏幕 Spotlight 控制
+    let spotlightUid = null;
+
+    // ICE 配置 (全球多節點 STUN 伺服器池，支援移動網路與跨網穿透)
+    const rtcConfig = {
+        iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' },
+            { urls: 'stun:stun2.l.google.com:19302' },
+            { urls: 'stun:stun3.l.google.com:19302' },
+            { urls: 'stun:stun4.l.google.com:19302' },
+            { urls: 'stun:global.stun.twilio.com:3478' }
+        ],
+        iceCandidatePoolSize: 10
+    };
+
     // ==== DOM 元素快取 ====
     const wsStatusTag = document.getElementById('wsStatusTag');
+    const globalStatusText = document.getElementById('globalStatusText');
     const myAvatarSm = document.getElementById('myAvatarSm');
     const myNicknameText = document.getElementById('myNicknameText');
     const lobbyScreen = document.getElementById('lobbyScreen');
@@ -71,6 +84,7 @@
     const localAvatarName = document.getElementById('localAvatarName');
     const localTagLabel = document.getElementById('localTagLabel');
     const localMicIndicator = document.getElementById('localMicIndicator');
+    const localScreenBadge = document.getElementById('localScreenBadge');
 
     const btnShareScreen = document.getElementById('btnShareScreen');
     const btnCamera = document.getElementById('btnCamera');
@@ -92,11 +106,11 @@
 
     // ==== 初始化使用者個人介面 ====
     function updateMyProfileUI() {
-        myNicknameText.textContent = myNickname;
-        myAvatarSm.textContent = myNickname.charAt(0).toUpperCase();
-        localAvatarCircle.textContent = myNickname.charAt(0).toUpperCase();
-        localAvatarName.textContent = myNickname;
-        localTagLabel.textContent = `${myNickname} (我)`;
+        if (myNicknameText) myNicknameText.textContent = myNickname;
+        if (myAvatarSm) myAvatarSm.textContent = myNickname.charAt(0).toUpperCase();
+        if (localAvatarCircle) localAvatarCircle.textContent = myNickname.charAt(0).toUpperCase();
+        if (localAvatarName) localAvatarName.textContent = myNickname;
+        if (localTagLabel) localTagLabel.textContent = `${myNickname} (我)`;
     }
     updateMyProfileUI();
 
@@ -108,7 +122,7 @@
             ws = new WebSocket(wsUrl);
         } catch (err) {
             console.error('[Cobin] WebSocket 創建失敗:', err);
-            setTimeout(initWebSocket, 2500);
+            setTimeout(initWebSocket, 2000);
             return;
         }
 
@@ -118,11 +132,10 @@
                 wsStatusTag.textContent = '🟢 已連線';
                 wsStatusTag.style.color = 'var(--accent-green)';
             }
-            const globalText = document.getElementById('globalStatusText');
-            if (globalText) {
-                globalText.textContent = '🟢 伺服器在線';
-                globalText.parentElement.style.borderColor = 'rgba(35, 165, 90, 0.4)';
-                globalText.parentElement.style.color = 'var(--accent-green)';
+            if (globalStatusText) {
+                globalStatusText.textContent = '🟢 伺服器在線';
+                globalStatusText.parentElement.style.borderColor = 'rgba(35, 165, 90, 0.4)';
+                globalStatusText.parentElement.style.color = 'var(--accent-green)';
             }
 
             // 送出暱稱初始化
@@ -145,11 +158,10 @@
                 wsStatusTag.textContent = '🔴 未連線';
                 wsStatusTag.style.color = 'var(--accent-red)';
             }
-            const globalText = document.getElementById('globalStatusText');
-            if (globalText) {
-                globalText.textContent = '🔴 連線中斷 (重試中)';
-                globalText.parentElement.style.borderColor = 'rgba(242, 63, 67, 0.4)';
-                globalText.parentElement.style.color = 'var(--accent-red)';
+            if (globalStatusText) {
+                globalStatusText.textContent = '🔴 連線中斷 (重試中)';
+                globalStatusText.parentElement.style.borderColor = 'rgba(242, 63, 67, 0.4)';
+                globalStatusText.parentElement.style.color = 'var(--accent-red)';
             }
             setTimeout(initWebSocket, 2000);
         };
@@ -158,15 +170,16 @@
             console.error('[Cobin] WebSocket 發生錯誤:', err);
         };
 
-        ws.onmessage = async (event) => {
+        ws.onmessage = (event) => {
             let data;
             try {
                 data = JSON.parse(event.data);
             } catch (e) {
+                console.error('[Cobin] 訊息 JSON 解析失敗:', event.data);
                 return;
             }
 
-            console.log('[Cobin] 收到信令:', data.type, data);
+            console.log('[Cobin] 收到伺服器訊息:', data.type, data);
 
             switch (data.type) {
                 case 'init-ack':
@@ -207,12 +220,6 @@
         };
     }
 
-    function handleWsError() {
-        // 切換下一個 host 重試 (127.0.0.1 <-> localhost)
-        currentHostIndex = (currentHostIndex + 1) % wsHosts.length;
-        setTimeout(initWebSocket, 2000);
-    }
-
     initWebSocket();
 
     // ==== 渲染左側房間在線列表 ====
@@ -243,7 +250,9 @@
 
         if (currentRoomId && rooms[currentRoomId]) {
             const count = rooms[currentRoomId].users.length;
-            roomParticipantsCount.textContent = `${count} 位成員在線`;
+            if (roomParticipantsCount) {
+                roomParticipantsCount.textContent = `${count} 位成員在線`;
+            }
         }
     }
 
@@ -258,19 +267,19 @@
 
         currentRoomId = roomId;
         currentRoomName = roomNameMap[roomId] || roomId;
-        currentRoomNameTitle.textContent = currentRoomName;
+        if (currentRoomNameTitle) currentRoomNameTitle.textContent = currentRoomName;
 
-        // 1. 0 延遲切換 UI
+        // 1. 切換 UI
         document.querySelectorAll('.room-item').forEach(el => el.classList.remove('active'));
         const activeItem = document.getElementById(`room-item-${roomId}`);
         if (activeItem) activeItem.classList.add('active');
 
-        lobbyScreen.style.display = 'none';
-        stageHeader.style.display = 'flex';
-        videoGrid.style.display = 'grid';
-        floatingActionBar.classList.remove('hidden');
+        if (lobbyScreen) lobbyScreen.style.display = 'none';
+        if (stageHeader) stageHeader.style.display = 'flex';
+        if (videoGrid) videoGrid.style.display = 'flex';
+        if (floatingActionBar) floatingActionBar.classList.remove('hidden');
         startCallTimer();
-        adjustGridColumns();
+        updateStageLayout();
 
         // 2. 獲取本地媒體 (鏡頭與麥克風)
         try {
@@ -280,12 +289,12 @@
             showToast('⚠️ 請允許存取麥克風與鏡頭');
         }
 
-        // 3. 送出加入房間信令
+        // 3. 發送加入房間信令
         if (ws && ws.readyState === WebSocket.OPEN) {
             sendJoinRoomSignal(roomId);
         } else {
             pendingRoomId = roomId;
-            showToast('🚀 正在連接信令伺服器...');
+            showToast('🔄 伺服器連線中，連上後將自動進入房間...');
         }
     };
 
@@ -304,7 +313,7 @@
         if (!localStream) {
             try {
                 localStream = await navigator.mediaDevices.getUserMedia({
-                    video: { width: { ideal: 1280 }, height: { ideal: 720 } },
+                    video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' },
                     audio: true
                 });
             } catch (e) {
@@ -319,8 +328,9 @@
                 }
             }
 
-            if (localStream) {
+            if (localStream && localVideo) {
                 localVideo.srcObject = localStream;
+                localVideo.play().catch(() => {});
                 setupLocalAudioAnalysis(localStream);
             }
         }
@@ -337,10 +347,12 @@
     // ==== 伺服器確認加入房間 ====
     async function handleJoinedRoomSuccess(data) {
         currentRoomName = data.roomName || currentRoomName;
-        currentRoomNameTitle.textContent = currentRoomName;
+        if (currentRoomNameTitle) currentRoomNameTitle.textContent = currentRoomName;
 
         const existingUsers = data.users || [];
-        roomParticipantsCount.textContent = `${existingUsers.length + 1} 位成員在線`;
+        if (roomParticipantsCount) {
+            roomParticipantsCount.textContent = `${existingUsers.length + 1} 位成員在線`;
+        }
 
         for (const user of existingUsers) {
             await createPeerConnection(user.uid, user.nickname, true);
@@ -372,19 +384,6 @@
         }
     }
 
-    // ICE 配置 (全球多節點 STUN 伺服器池，支援移動網路與跨網穿透)
-    const rtcConfig = {
-        iceServers: [
-            { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun1.l.google.com:19302' },
-            { urls: 'stun:stun2.l.google.com:19302' },
-            { urls: 'stun:stun3.l.google.com:19302' },
-            { urls: 'stun:stun4.l.google.com:19302' },
-            { urls: 'stun:global.stun.twilio.com:3478' }
-        ],
-        iceCandidatePoolSize: 10
-    };
-
     // ==== 建立 WebRTC 連線 (Mesh P2P) ====
     async function createPeerConnection(targetUid, targetNickname, isInitiator) {
         if (peers[targetUid] && peers[targetUid].pc) {
@@ -402,19 +401,31 @@
             videoEl: videoEl,
             avatarEl: tile.querySelector('.avatar-placeholder'),
             micIcon: tile.querySelector('.mic-status-icon'),
-            pendingCandidates: [] // ICE 候選者排隊緩存
+            pendingCandidates: []
         };
+
+        // 預先加入 Transceivers 確保雙向音視訊通暢
+        try {
+            pc.addTransceiver('audio', { direction: 'sendrecv' });
+            pc.addTransceiver('video', { direction: 'sendrecv' });
+        } catch (e) {}
 
         // 加入本地軌道
         if (localStream) {
             localStream.getTracks().forEach(track => {
                 try {
-                    pc.addTrack(track, localStream);
+                    const senders = pc.getSenders();
+                    const sender = senders.find(s => s.track && s.track.kind === track.kind);
+                    if (sender) {
+                        sender.replaceTrack(track);
+                    } else {
+                        pc.addTrack(track, localStream);
+                    }
                 } catch (e) {}
             });
         }
 
-        // 移動端 WebRTC 軌道接收監聽
+        // 接收遠端軌道
         pc.ontrack = (event) => {
             console.log(`[Cobin] 收到遠端軌道 (${targetNickname || targetUid}):`, event.track.kind);
             const remoteStream = event.streams[0] || new MediaStream([event.track]);
@@ -424,7 +435,7 @@
                 peerObj.videoEl.playsInline = true;
                 peerObj.videoEl.autoplay = true;
                 peerObj.videoEl.play().catch(err => {
-                    console.warn('[Cobin] 遠端視訊自動播放受限，等待使用者互動:', err);
+                    console.warn('[Cobin] 遠端視訊自動播放受限:', err);
                 });
                 setupRemoteAudioAnalysis(remoteStream, targetUid);
             }
@@ -437,7 +448,9 @@
                     targetUid: targetUid,
                     signal: {
                         type: 'candidate',
-                        candidate: event.candidate
+                        candidate: event.candidate.candidate,
+                        sdpMid: event.candidate.sdpMid,
+                        sdpMLineIndex: event.candidate.sdpMLineIndex
                     }
                 }));
             }
@@ -450,10 +463,6 @@
             } else if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
                 handleUserLeft(targetUid);
             }
-        };
-
-        pc.oniceconnectionstatechange = () => {
-            console.log(`[Cobin] ICE 穿透狀態 (${targetNickname || targetUid}): ${pc.iceConnectionState}`);
         };
 
         if (isInitiator) {
@@ -469,7 +478,7 @@
                         targetUid: targetUid,
                         signal: {
                             type: 'offer',
-                            sdp: pc.localDescription
+                            sdp: pc.localDescription.sdp
                         }
                     }));
                 }
@@ -480,6 +489,49 @@
 
         updateStageLayout();
         return pc;
+    }
+
+    // ==== 萬能容錯 SDP 與 ICE Candidate 解析器 ====
+    function parseSessionDescription(signal, expectedType) {
+        if (!signal) return null;
+        let sdpStr = '';
+        let typeStr = signal.type || expectedType;
+
+        if (typeof signal === 'string') {
+            sdpStr = signal;
+        } else if (typeof signal.sdp === 'string') {
+            sdpStr = signal.sdp;
+        } else if (signal.sdp && typeof signal.sdp.sdp === 'string') {
+            sdpStr = signal.sdp.sdp;
+            typeStr = signal.sdp.type || typeStr;
+        }
+
+        if (!sdpStr) return null;
+
+        return new RTCSessionDescription({
+            type: typeStr,
+            sdp: sdpStr
+        });
+    }
+
+    function parseIceCandidate(candData) {
+        if (!candData) return null;
+        try {
+            if (typeof candData === 'string') {
+                return new RTCIceCandidate({ candidate: candData });
+            }
+            const candidateStr = candData.candidate || (candData.candidate && candData.candidate.candidate) || '';
+            const sdpMid = candData.sdpMid !== undefined ? candData.sdpMid : (candData.candidate && candData.candidate.sdpMid);
+            const sdpMLineIndex = candData.sdpMLineIndex !== undefined ? candData.sdpMLineIndex : (candData.candidate && candData.candidate.sdpMLineIndex);
+
+            return new RTCIceCandidate({
+                candidate: candidateStr,
+                sdpMid: sdpMid,
+                sdpMLineIndex: sdpMLineIndex !== null && sdpMLineIndex !== undefined ? Number(sdpMLineIndex) : null
+            });
+        } catch (e) {
+            return null;
+        }
     }
 
     // ==== 處理信令 (含 ICE Candidate 隊列防止掉包) ====
@@ -497,64 +549,70 @@
 
         if (signal.type === 'offer') {
             try {
-                await pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
+                const rtcDesc = parseSessionDescription(signal, 'offer');
+                if (rtcDesc) {
+                    await pc.setRemoteDescription(rtcDesc);
 
-                // 處理之前提早收到的 ICE Candidate
-                if (peerObj.pendingCandidates && peerObj.pendingCandidates.length > 0) {
-                    for (const candidate of peerObj.pendingCandidates) {
-                        try {
-                            await pc.addIceCandidate(new RTCIceCandidate(candidate));
-                        } catch (e) {}
-                    }
-                    peerObj.pendingCandidates = [];
-                }
-
-                const answer = await pc.createAnswer({
-                    offerToReceiveAudio: true,
-                    offerToReceiveVideo: true
-                });
-                await pc.setLocalDescription(answer);
-
-                if (ws && ws.readyState === WebSocket.OPEN) {
-                    ws.send(JSON.stringify({
-                        type: 'signal',
-                        targetUid: fromUid,
-                        signal: {
-                            type: 'answer',
-                            sdp: pc.localDescription
+                    if (peerObj.pendingCandidates && peerObj.pendingCandidates.length > 0) {
+                        for (const rawCand of peerObj.pendingCandidates) {
+                            const cand = parseIceCandidate(rawCand);
+                            if (cand) {
+                                try { await pc.addIceCandidate(cand); } catch (e) {}
+                            }
                         }
-                    }));
+                        peerObj.pendingCandidates = [];
+                    }
+
+                    const answer = await pc.createAnswer({
+                        offerToReceiveAudio: true,
+                        offerToReceiveVideo: true
+                    });
+                    await pc.setLocalDescription(answer);
+
+                    if (ws && ws.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify({
+                            type: 'signal',
+                            targetUid: fromUid,
+                            signal: {
+                                type: 'answer',
+                                sdp: pc.localDescription.sdp
+                            }
+                        }));
+                    }
                 }
             } catch (e) {
                 console.error('[Cobin] 處理 Offer 失敗:', e);
             }
         } else if (signal.type === 'answer') {
             try {
-                await pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
+                const rtcDesc = parseSessionDescription(signal, 'answer');
+                if (rtcDesc) {
+                    await pc.setRemoteDescription(rtcDesc);
 
-                // 處理之前提早收到的 ICE Candidate
-                if (peerObj.pendingCandidates && peerObj.pendingCandidates.length > 0) {
-                    for (const candidate of peerObj.pendingCandidates) {
-                        try {
-                            await pc.addIceCandidate(new RTCIceCandidate(candidate));
-                        } catch (e) {}
+                    if (peerObj.pendingCandidates && peerObj.pendingCandidates.length > 0) {
+                        for (const rawCand of peerObj.pendingCandidates) {
+                            const cand = parseIceCandidate(rawCand);
+                            if (cand) {
+                                try { await pc.addIceCandidate(cand); } catch (e) {}
+                            }
+                        }
+                        peerObj.pendingCandidates = [];
                     }
-                    peerObj.pendingCandidates = [];
                 }
             } catch (e) {
                 console.error('[Cobin] 處理 Answer 失敗:', e);
             }
         } else if (signal.type === 'candidate') {
-            if (pc.remoteDescription && pc.remoteDescription.type) {
-                try {
-                    await pc.addIceCandidate(new RTCIceCandidate(signal.candidate));
-                } catch (e) {
-                    console.error('[Cobin] 加入 Candidate 失敗:', e);
+            const cand = parseIceCandidate(signal.candidate || signal);
+            if (cand) {
+                if (pc.remoteDescription && pc.remoteDescription.type) {
+                    try {
+                        await pc.addIceCandidate(cand);
+                    } catch (e) {}
+                } else {
+                    if (!peerObj.pendingCandidates) peerObj.pendingCandidates = [];
+                    peerObj.pendingCandidates.push(signal.candidate || signal);
                 }
-            } else {
-                // 尚未設置 RemoteDescription，先排入暫存隊列
-                if (!peerObj.pendingCandidates) peerObj.pendingCandidates = [];
-                peerObj.pendingCandidates.push(signal.candidate);
             }
         }
     }
@@ -590,7 +648,7 @@
                     <span class="screen-badge" id="screen-badge-${uid}" style="display:none;">螢幕分享</span>
                 </div>
             `;
-            videoGrid.appendChild(tile);
+            if (videoGrid) videoGrid.appendChild(tile);
             updateStageLayout();
         }
         return tile;
@@ -618,9 +676,9 @@
         if (isScreen) {
             if (tile) tile.classList.add('is-screen');
             if (screenBadge) screenBadge.style.display = 'inline-block';
-            spotlightUid = uid; // 遠端開啟螢幕分享時自動放大至大屏幕
+            spotlightUid = uid;
             updateStageLayout();
-            showToast(`🖥️ ${peer.nickname || '成員'} 正在分享螢幕`);
+            showToast(`🖥️ ${peer.nickname || '成員'} 正在分享螢幕 (已放大至大屏幕)`);
         } else {
             if (tile) tile.classList.remove('is-screen');
             if (screenBadge) screenBadge.style.display = 'none';
@@ -632,16 +690,12 @@
     }
 
     // ==== 🌟 大屏幕 Spotlight 與放大控制 ====
-    let spotlightUid = null;
-    const thumbnailsStrip = document.getElementById('thumbnailsStrip');
-    const localScreenBadge = document.getElementById('localScreenBadge');
-
     window.toggleSpotlight = function(uid, event) {
         if (event) event.stopPropagation();
         if (spotlightUid === uid) {
-            spotlightUid = null; // 取消大屏幕，還原回網格
+            spotlightUid = null;
         } else {
-            spotlightUid = uid; // 放大指定成員至大屏幕
+            spotlightUid = uid;
         }
         updateStageLayout();
     };
@@ -680,7 +734,6 @@
         ].filter(t => t.el !== null);
 
         if (spotlightUid) {
-            // 大屏幕 Spotlight 模式 (純 CSS 控制，避免 DOM 移動導致 video 暫停/黑屏)
             videoGrid.classList.add('spotlight-mode');
             allTiles.forEach(t => {
                 if (t.uid === spotlightUid) {
@@ -690,7 +743,6 @@
                 }
             });
         } else {
-            // 網格模式
             videoGrid.classList.remove('spotlight-mode');
             allTiles.forEach(t => {
                 t.el.classList.remove('is-spotlight');
@@ -704,14 +756,12 @@
         if (!isScreenSharing) {
             try {
                 if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
-                    showToast('⚠️ 當前瀏覽器/設備不支援螢幕分享');
+                    showToast('⚠️ 當前瀏覽器/設備不支援開啟螢幕分享');
                     return;
                 }
 
                 screenStream = await navigator.mediaDevices.getDisplayMedia({
-                    video: {
-                        cursor: 'always'
-                    },
+                    video: { cursor: 'always' },
                     audio: false
                 });
 
@@ -735,12 +785,14 @@
                     }
                 }
 
-                localVideo.srcObject = screenStream;
-                localVideo.play().catch(() => {});
-                localVideoTile.classList.add('is-screen');
+                if (localVideo) {
+                    localVideo.srcObject = screenStream;
+                    localVideo.play().catch(() => {});
+                }
+                if (localVideoTile) localVideoTile.classList.add('is-screen');
                 if (localScreenBadge) localScreenBadge.style.display = 'inline-block';
                 isScreenSharing = true;
-                btnShareScreen.classList.add('active');
+                if (btnShareScreen) btnShareScreen.classList.add('active');
 
                 // 本地螢幕分享自動放大至大屏幕
                 spotlightUid = 'local';
@@ -790,14 +842,16 @@
                     }
                 } catch (e) {}
             }
-            localVideo.srcObject = localStream;
-            localVideo.play().catch(() => {});
+            if (localVideo) {
+                localVideo.srcObject = localStream;
+                localVideo.play().catch(() => {});
+            }
         }
 
-        localVideoTile.classList.remove('is-screen');
+        if (localVideoTile) localVideoTile.classList.remove('is-screen');
         if (localScreenBadge) localScreenBadge.style.display = 'none';
         isScreenSharing = false;
-        btnShareScreen.classList.remove('active');
+        if (btnShareScreen) btnShareScreen.classList.remove('active');
 
         if (spotlightUid === 'local') {
             spotlightUid = null;
@@ -818,13 +872,26 @@
 
     // ==== 控制列：2. 複製邀請連結 ====
     window.copyInviteLink = function() {
-        const url = `${window.location.origin}${window.location.pathname}?room=${currentRoomId || 'room-1'}`;
-        navigator.clipboard.writeText(url).then(() => {
-            showToast('🔗 已複製房間連結，發給好友即可進入！');
-        }).catch(() => {
-            showToast('🔗 連結: ' + url);
-        });
+        const url = new URL(window.location.href);
+        if (currentRoomId) {
+            url.searchParams.set('room', currentRoomId);
+        }
+        const inviteUrl = url.toString();
+
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(inviteUrl).then(() => {
+                showToast(`📋 已複製 ${currentRoomName || '房間'} 邀請連結！`);
+            }).catch(() => {
+                promptCopyFallback(inviteUrl);
+            });
+        } else {
+            promptCopyFallback(inviteUrl);
+        }
     };
+
+    function promptCopyFallback(text) {
+        window.prompt('請複製此通話連結發送給好友：', text);
+    }
 
     // ==== 控制列：3. 鏡頭切換 ====
     window.toggleCamera = function() {
@@ -838,22 +905,23 @@
             ws.send(JSON.stringify({
                 type: 'media-state',
                 mic: isMicEnabled,
-                camera: isCameraEnabled
+                camera: isCameraEnabled,
+                isScreen: isScreenSharing
             }));
         }
     };
 
     function updateCameraUI() {
         if (isCameraEnabled) {
-            btnCamera.classList.remove('off');
-            camIconOn.style.display = 'block';
-            camIconOff.style.display = 'none';
-            localAvatarPlaceholder.style.display = 'none';
+            if (btnCamera) btnCamera.classList.remove('off');
+            if (camIconOn) camIconOn.style.display = 'block';
+            if (camIconOff) camIconOff.style.display = 'none';
+            if (localAvatarPlaceholder) localAvatarPlaceholder.style.display = 'none';
         } else {
-            btnCamera.classList.add('off');
-            camIconOn.style.display = 'none';
-            camIconOff.style.display = 'block';
-            localAvatarPlaceholder.style.display = 'flex';
+            if (btnCamera) btnCamera.classList.add('off');
+            if (camIconOn) camIconOn.style.display = 'none';
+            if (camIconOff) camIconOff.style.display = 'block';
+            if (localAvatarPlaceholder) localAvatarPlaceholder.style.display = 'flex';
         }
     }
 
@@ -869,22 +937,23 @@
             ws.send(JSON.stringify({
                 type: 'media-state',
                 mic: isMicEnabled,
-                camera: isCameraEnabled
+                camera: isCameraEnabled,
+                isScreen: isScreenSharing
             }));
         }
     };
 
     function updateMicUI() {
         if (isMicEnabled) {
-            btnMic.classList.remove('off');
-            micIconOn.style.display = 'block';
-            micIconOff.style.display = 'none';
-            localMicIndicator.classList.remove('muted');
+            if (btnMic) btnMic.classList.remove('off');
+            if (micIconOn) micIconOn.style.display = 'block';
+            if (micIconOff) micIconOff.style.display = 'none';
+            if (localMicIndicator) localMicIndicator.classList.remove('muted');
         } else {
-            btnMic.classList.add('off');
-            micIconOn.style.display = 'none';
-            micIconOff.style.display = 'block';
-            localMicIndicator.classList.add('muted');
+            if (btnMic) btnMic.classList.add('off');
+            if (micIconOn) micIconOn.style.display = 'none';
+            if (micIconOff) micIconOff.style.display = 'block';
+            if (localMicIndicator) localMicIndicator.classList.add('muted');
         }
     }
 
@@ -925,19 +994,18 @@
 
         currentRoomId = null;
         currentRoomName = '';
-
         spotlightUid = null;
-        updateStageLayout();
 
         document.querySelectorAll('.room-item').forEach(el => el.classList.remove('active'));
-        stageHeader.style.display = 'none';
-        videoGrid.style.display = 'none';
-        floatingActionBar.classList.add('hidden');
-        lobbyScreen.style.display = 'flex';
+        if (stageHeader) stageHeader.style.display = 'none';
+        if (videoGrid) videoGrid.style.display = 'none';
+        if (floatingActionBar) floatingActionBar.classList.add('hidden');
+        if (lobbyScreen) lobbyScreen.style.display = 'flex';
     }
 
     // ==== 視訊網格排版 ====
     function adjustGridColumns() {
+        if (!videoGrid) return;
         const totalUsers = Object.keys(peers).length + 1;
         if (totalUsers === 1) {
             videoGrid.className = 'video-grid-container single-user';
@@ -955,11 +1023,11 @@
             const elapsed = Math.floor((Date.now() - callStartTimestamp) / 1000);
             const mins = String(Math.floor(elapsed / 60)).padStart(2, '0');
             const secs = String(elapsed % 60).padStart(2, '0');
-            callDurationTimer.textContent = `${mins}:${secs}`;
+            if (callDurationTimer) callDurationTimer.textContent = `${mins}:${secs}`;
         }, 1000);
     }
 
-    // ==== 說話波形分析 ====
+    // ==== 說話波形分析 (Speaking Indicator) ====
     function setupLocalAudioAnalysis(stream) {
         try {
             if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -976,9 +1044,9 @@
                 for (let i = 0; i < buffer.length; i++) sum += buffer[i];
                 const avg = sum / buffer.length;
                 if (avg > 25 && isMicEnabled) {
-                    localVideoTile.classList.add('speaking');
+                    if (localVideoTile) localVideoTile.classList.add('speaking');
                 } else {
-                    localVideoTile.classList.remove('speaking');
+                    if (localVideoTile) localVideoTile.classList.remove('speaking');
                 }
                 requestAnimationFrame(detectSpeaking);
             }
@@ -1014,16 +1082,19 @@
 
     // ==== 暱稱修改 Modal ====
     window.openNicknameModal = function() {
-        nicknameInput.value = myNickname;
-        nicknameModal.classList.add('show');
-        nicknameInput.focus();
+        if (nicknameInput) {
+            nicknameInput.value = myNickname;
+            nicknameInput.focus();
+        }
+        if (nicknameModal) nicknameModal.classList.add('show');
     };
 
     window.closeNicknameModal = function() {
-        nicknameModal.classList.remove('show');
+        if (nicknameModal) nicknameModal.classList.remove('show');
     };
 
     window.saveNickname = function() {
+        if (!nicknameInput) return;
         const val = nicknameInput.value.trim();
         if (val) {
             myNickname = val;
@@ -1040,31 +1111,10 @@
         closeNicknameModal();
     };
 
-    nicknameInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') saveNickname();
-    });
-
-    // ==== 複製邀請連結 ====
-    window.copyInviteLink = function() {
-        const url = new URL(window.location.href);
-        if (currentRoomId) {
-            url.searchParams.set('room', currentRoomId);
-        }
-        const inviteUrl = url.toString();
-
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(inviteUrl).then(() => {
-                showToast(`📋 已複製 ${currentRoomName || '房間'} 邀請連結！`);
-            }).catch(() => {
-                promptCopyFallback(inviteUrl);
-            });
-        } else {
-            promptCopyFallback(inviteUrl);
-        }
-    };
-
-    function promptCopyFallback(text) {
-        window.prompt('請複製此通話連結發送給好友：', text);
+    if (nicknameInput) {
+        nicknameInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') saveNickname();
+        });
     }
 
     // ==== 自動加入 URL 指定的房間 (如果有 ?room=xxx) ====
@@ -1078,6 +1128,7 @@
     // ==== Toast 提示 ====
     let toastTimeout = null;
     function showToast(text) {
+        if (!toastMsg) return;
         toastMsg.textContent = text;
         toastMsg.classList.add('show');
         if (toastTimeout) clearTimeout(toastTimeout);
