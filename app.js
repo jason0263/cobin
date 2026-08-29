@@ -52,14 +52,6 @@
     // 音訊檢測 (Speaking Indicator)
     let audioContext = null;
 
-    // ICE 配置 (Google STUN)
-    const rtcConfig = {
-        iceServers: [
-            { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun1.l.google.com:19302' }
-        ]
-    };
-
     // ==== DOM 元素快取 ====
     const wsStatusTag = document.getElementById('wsStatusTag');
     const myAvatarSm = document.getElementById('myAvatarSm');
@@ -380,6 +372,19 @@
         }
     }
 
+    // ICE 配置 (全球多節點 STUN 伺服器池，支援移動網路與跨網穿透)
+    const rtcConfig = {
+        iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' },
+            { urls: 'stun:stun2.l.google.com:19302' },
+            { urls: 'stun:stun3.l.google.com:19302' },
+            { urls: 'stun:stun4.l.google.com:19302' },
+            { urls: 'stun:global.stun.twilio.com:3478' }
+        ],
+        iceCandidatePoolSize: 10
+    };
+
     // ==== 建立 WebRTC 連線 (Mesh P2P) ====
     async function createPeerConnection(targetUid, targetNickname, isInitiator) {
         if (peers[targetUid] && peers[targetUid].pc) {
@@ -388,27 +393,39 @@
 
         const pc = new RTCPeerConnection(rtcConfig);
         const tile = ensureUserVideoTile(targetUid, targetNickname);
+        const videoEl = tile.querySelector('video');
 
         peers[targetUid] = {
             pc: pc,
             nickname: targetNickname,
             videoTile: tile,
-            videoEl: tile.querySelector('video'),
+            videoEl: videoEl,
             avatarEl: tile.querySelector('.avatar-placeholder'),
-            micIcon: tile.querySelector('.mic-status-icon')
+            micIcon: tile.querySelector('.mic-status-icon'),
+            pendingCandidates: [] // ICE 候選者排隊緩存
         };
 
+        // 加入本地軌道
         if (localStream) {
             localStream.getTracks().forEach(track => {
-                pc.addTrack(track, localStream);
+                try {
+                    pc.addTrack(track, localStream);
+                } catch (e) {}
             });
         }
 
+        // 移動端 WebRTC 軌道接收監聽
         pc.ontrack = (event) => {
-            const remoteStream = event.streams[0];
+            console.log(`[Cobin] 收到遠端軌道 (${targetNickname || targetUid}):`, event.track.kind);
+            const remoteStream = event.streams[0] || new MediaStream([event.track]);
             const peerObj = peers[targetUid];
             if (peerObj && peerObj.videoEl) {
                 peerObj.videoEl.srcObject = remoteStream;
+                peerObj.videoEl.playsInline = true;
+                peerObj.videoEl.autoplay = true;
+                peerObj.videoEl.play().catch(err => {
+                    console.warn('[Cobin] 遠端視訊自動播放受限，等待使用者互動:', err);
+                });
                 setupRemoteAudioAnalysis(remoteStream, targetUid);
             }
         };
@@ -427,14 +444,24 @@
         };
 
         pc.onconnectionstatechange = () => {
-            if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+            console.log(`[Cobin] P2P 連線狀態 (${targetNickname || targetUid}): ${pc.connectionState}`);
+            if (pc.connectionState === 'connected') {
+                showToast(`🟢 已與 ${targetNickname || '成員'} 建立即時通話！`);
+            } else if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
                 handleUserLeft(targetUid);
             }
         };
 
+        pc.oniceconnectionstatechange = () => {
+            console.log(`[Cobin] ICE 穿透狀態 (${targetNickname || targetUid}): ${pc.iceConnectionState}`);
+        };
+
         if (isInitiator) {
             try {
-                const offer = await pc.createOffer();
+                const offer = await pc.createOffer({
+                    offerToReceiveAudio: true,
+                    offerToReceiveVideo: true
+                });
                 await pc.setLocalDescription(offer);
                 if (ws && ws.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify({
@@ -451,24 +478,43 @@
             }
         }
 
-        adjustGridColumns();
+        updateStageLayout();
         return pc;
     }
 
-    // ==== 處理信令 ====
+    // ==== 處理信令 (含 ICE Candidate 隊列防止掉包) ====
     async function handleSignalMessage(fromUid, fromNickname, signal) {
         if (!signal) return;
 
-        let pc = peers[fromUid]?.pc;
-        if (!pc) {
-            pc = await createPeerConnection(fromUid, fromNickname, false);
+        let peerObj = peers[fromUid];
+        if (!peerObj || !peerObj.pc) {
+            await createPeerConnection(fromUid, fromNickname, false);
+            peerObj = peers[fromUid];
         }
+
+        const pc = peerObj?.pc;
+        if (!pc) return;
 
         if (signal.type === 'offer') {
             try {
                 await pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
-                const answer = await pc.createAnswer();
+
+                // 處理之前提早收到的 ICE Candidate
+                if (peerObj.pendingCandidates && peerObj.pendingCandidates.length > 0) {
+                    for (const candidate of peerObj.pendingCandidates) {
+                        try {
+                            await pc.addIceCandidate(new RTCIceCandidate(candidate));
+                        } catch (e) {}
+                    }
+                    peerObj.pendingCandidates = [];
+                }
+
+                const answer = await pc.createAnswer({
+                    offerToReceiveAudio: true,
+                    offerToReceiveVideo: true
+                });
                 await pc.setLocalDescription(answer);
+
                 if (ws && ws.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify({
                         type: 'signal',
@@ -485,14 +531,30 @@
         } else if (signal.type === 'answer') {
             try {
                 await pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
+
+                // 處理之前提早收到的 ICE Candidate
+                if (peerObj.pendingCandidates && peerObj.pendingCandidates.length > 0) {
+                    for (const candidate of peerObj.pendingCandidates) {
+                        try {
+                            await pc.addIceCandidate(new RTCIceCandidate(candidate));
+                        } catch (e) {}
+                    }
+                    peerObj.pendingCandidates = [];
+                }
             } catch (e) {
                 console.error('[Cobin] 處理 Answer 失敗:', e);
             }
         } else if (signal.type === 'candidate') {
-            try {
-                await pc.addIceCandidate(new RTCIceCandidate(signal.candidate));
-            } catch (e) {
-                console.error('[Cobin] 加入 Candidate 失敗:', e);
+            if (pc.remoteDescription && pc.remoteDescription.type) {
+                try {
+                    await pc.addIceCandidate(new RTCIceCandidate(signal.candidate));
+                } catch (e) {
+                    console.error('[Cobin] 加入 Candidate 失敗:', e);
+                }
+            } else {
+                // 尚未設置 RemoteDescription，先排入暫存隊列
+                if (!peerObj.pendingCandidates) peerObj.pendingCandidates = [];
+                peerObj.pendingCandidates.push(signal.candidate);
             }
         }
     }
