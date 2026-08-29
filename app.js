@@ -844,10 +844,16 @@
 
     // ==== 控制列：1. 螢幕分享 ====
     window.toggleScreenShare = async function() {
+        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
         if (!isScreenSharing) {
             try {
                 if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
-                    showToast('⚠️ 當前瀏覽器/設備不支援開啟螢幕分享');
+                    if (isMobile) {
+                        showToast('📱 手機瀏覽器因系統隱私限制不支援發起分享，請用電腦發起（手機支援全螢幕觀看）');
+                    } else {
+                        showToast('⚠️ 當前瀏覽器/設備不支援開啟螢幕分享');
+                    }
                     return;
                 }
 
