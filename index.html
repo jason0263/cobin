@@ -1145,7 +1145,7 @@
                     </button>
                 </div>
                 <video id="localVideo" autoplay muted playsinline webkit-playsinline></video>
-                <div class="avatar-placeholder" id="localAvatarPlaceholder" style="display:none;">
+                <div class="avatar-placeholder" id="localAvatarPlaceholder" style="display:flex;">
                     <div class="avatar-circle-lg" id="localAvatarCircle">U</div>
                     <div class="avatar-name-lg" id="localAvatarName">我 (本端)</div>
                 </div>
@@ -1174,11 +1174,11 @@
                 </svg>
             </button>
 
-            <button class="call-btn btn-camera" id="btnCamera" title="開關鏡頭" onclick="toggleCamera()">
-                <svg id="camIconOn" viewBox="0 0 24 24">
+            <button class="call-btn btn-camera off" id="btnCamera" title="開關鏡頭" onclick="toggleCamera()">
+                <svg id="camIconOn" viewBox="0 0 24 24" style="display:none;">
                     <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/>
                 </svg>
-                <svg id="camIconOff" viewBox="0 0 24 24" style="display:none;">
+                <svg id="camIconOff" viewBox="0 0 24 24" style="display:block;">
                     <path d="M21 6.5l-4 4V7c0-.55-.45-1-1-1H9.82L21 17.18V6.5zM3.27 2L2 3.27 4.73 6H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.21 0 .39-.08.54-.18L19.73 21 21 19.73 3.27 2zM16 16.73L5.27 6H16v10.73z"/>
                 </svg>
             </button>
@@ -1241,6 +1241,6 @@
             }
         }
     </script>
-    <script src="app.js?v=20260830_final_v1"></script>
+    <script src="app.js?v=20260830_default_off"></script>
 </body>
 </html>

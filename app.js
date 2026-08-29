@@ -31,11 +31,11 @@
     let currentRoomName = '';
     let pendingRoomId = null;
 
-    // 媒體狀態
+    // 媒體狀態 (預設關閉鏡頭、開啟麥克風)
     let localStream = null;
     let screenStream = null;
     let isMicEnabled = true;
-    let isCameraEnabled = true;
+    let isCameraEnabled = false;
     let isScreenSharing = false;
 
     // WebRTC PeerConnections: { [targetUid]: { pc, nickname, videoTile, videoEl, avatarEl, micIcon, pendingCandidates } }
@@ -322,7 +322,7 @@
     window.addEventListener('click', unlockMobileAudio, { passive: true });
     window.addEventListener('touchstart', unlockMobileAudio, { passive: true });
 
-    // ==== 初始化本地媒體 (支援手機降級與高音質通話配置) ====
+    // ==== 初始化本地媒體 (預設純麥克風，保護隱私且秒進房間) ====
     async function initLocalMedia() {
         if (!localStream) {
             const audioConstraints = {
@@ -332,36 +332,22 @@
             };
 
             try {
-                // 優先請求鏡頭 + 麥克風
                 localStream = await navigator.mediaDevices.getUserMedia({
-                    video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' },
+                    video: false,
                     audio: audioConstraints
                 });
             } catch (e) {
-                console.warn('[Cobin] 請求相機失敗，降級為純麥克風語音:', e);
-                try {
-                    // 降級為純麥克風
-                    localStream = await navigator.mediaDevices.getUserMedia({
-                        video: false,
-                        audio: audioConstraints
-                    });
-                    isCameraEnabled = false;
-                } catch (e2) {
-                    console.error('[Cobin] 存取麥克風失敗:', e2);
-                    showToast('⚠️ 請允許存取麥克風以進行語音通話');
-                }
+                console.error('[Cobin] 存取麥克風失敗:', e);
+                showToast('⚠️ 請允許存取麥克風以進行語音通話');
             }
 
             if (localStream && localVideo) {
-                localVideo.srcObject = localStream;
-                localVideo.play().catch(() => {});
                 setupLocalAudioAnalysis(localStream);
             }
         }
 
         if (localStream) {
             localStream.getAudioTracks().forEach(t => t.enabled = isMicEnabled);
-            localStream.getVideoTracks().forEach(t => t.enabled = isCameraEnabled);
         }
 
         updateCameraUI();
@@ -1052,12 +1038,63 @@
         window.prompt('請複製此通話連結發送給好友：', text);
     }
 
-    // ==== 控制列：3. 鏡頭切換 ====
-    window.toggleCamera = function() {
-        if (!localStream) return;
-        isCameraEnabled = !isCameraEnabled;
+    // ==== 控制列：3. 鏡頭切換 (預設關閉，點擊時動態請求開啟) ====
+    window.toggleCamera = async function() {
+        if (!localStream) {
+            await initLocalMedia();
+        }
 
-        localStream.getVideoTracks().forEach(t => t.enabled = isCameraEnabled);
+        const currentCamTrack = localStream ? localStream.getVideoTracks()[0] : null;
+
+        if (!isCameraEnabled) {
+            // 開啟鏡頭
+            try {
+                if (!currentCamTrack) {
+                    const camStream = await navigator.mediaDevices.getUserMedia({
+                        video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' },
+                        audio: false
+                    });
+                    const newCamTrack = camStream.getVideoTracks()[0];
+                    if (newCamTrack) {
+                        localStream.addTrack(newCamTrack);
+                        for (const uid in peers) {
+                            const pc = peers[uid].pc;
+                            if (!pc) continue;
+                            const videoSender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
+                            if (videoSender) {
+                                videoSender.replaceTrack(newCamTrack);
+                            } else {
+                                pc.addTrack(newCamTrack, localStream);
+                            }
+                        }
+                    }
+                } else {
+                    currentCamTrack.enabled = true;
+                }
+
+                if (localVideo) {
+                    localVideo.srcObject = localStream;
+                    localVideo.play().catch(() => {});
+                }
+                isCameraEnabled = true;
+                showToast('📷 已開啟鏡頭');
+            } catch (err) {
+                console.warn('[Cobin] 開啟鏡頭失敗:', err);
+                showToast('⚠️ 無法存取鏡頭設備');
+                return;
+            }
+        } else {
+            // 關閉鏡頭
+            if (currentCamTrack) {
+                currentCamTrack.enabled = false;
+            }
+            if (localVideo && !isScreenSharing) {
+                localVideo.srcObject = null;
+            }
+            isCameraEnabled = false;
+            showToast('📷 已關閉鏡頭');
+        }
+
         updateCameraUI();
 
         if (ws && ws.readyState === WebSocket.OPEN) {
