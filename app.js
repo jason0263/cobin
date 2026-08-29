@@ -482,15 +482,22 @@
             }
             peerObj.remoteStream.addTrack(event.track);
 
-            // 1. 綁定視訊畫面
+            // 1. 綁定視訊畫面 (手機端強制 muted 確保 100% 自動流暢渲染視訊，聲音由獨立 audio 播放)
             if (peerObj.videoEl) {
-                peerObj.videoEl.srcObject = peerObj.remoteStream;
+                peerObj.videoEl.muted = true;
                 peerObj.videoEl.playsInline = true;
-                peerObj.videoEl.autoplay = true;
-                peerObj.videoEl.play().catch(() => {});
+                peerObj.videoEl.setAttribute('playsinline', '');
+                peerObj.videoEl.setAttribute('webkit-playsinline', '');
+                peerObj.videoEl.srcObject = peerObj.remoteStream;
+                peerObj.videoEl.play().catch(err => {
+                    console.warn('[Cobin] 視訊播放重試:', err);
+                });
+                if (peerObj.avatarEl && event.track.kind === 'video') {
+                    peerObj.avatarEl.style.display = 'none';
+                }
             }
 
-            // 2. 綁定獨立揚聲器音訊
+            // 2. 綁定獨立揚聲器音訊 (負責手機揚聲器和耳機通話聲音)
             if (peerObj.audioEl) {
                 peerObj.audioEl.srcObject = peerObj.remoteStream;
                 peerObj.audioEl.play().catch(err => {
@@ -733,7 +740,7 @@
                         <span>全螢幕</span>
                     </button>
                 </div>
-                <video autoplay playsinline></video>
+                <video autoplay muted playsinline webkit-playsinline></video>
                 <div class="avatar-placeholder" id="avatar-${uid}" style="display:none;">
                     <div class="avatar-circle-lg">${initial}</div>
                     <div class="avatar-name-lg">${escapeHtml(nickname)}</div>
