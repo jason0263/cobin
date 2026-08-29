@@ -1,0 +1,14 @@
+[Unit]
+Description=Cobin WebSocket Signaling Server
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/var/www/cobin
+ExecStart=/usr/bin/php server.php start
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

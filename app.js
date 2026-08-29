@@ -3,22 +3,24 @@
 (() => {
     console.log('[Cobin] app.js 已載入');
 
-    // ==== 動態解析 WebSocket 信令位址 (支援本地、區域網路與遠端網域) ====
+    // ==== 動態解析 WebSocket 信令位址 ====
+    // 支援：本地開發 (127.0.0.1:8080)、雲端部署 (Nginx /ws 反向代理)、自訂 ?ws= 參數
     const urlParams = new URLSearchParams(window.location.search);
     const customWs = urlParams.get('ws'); // 支援自訂 ?ws=xxx 參數
 
     let wsUrl = '';
     if (customWs) {
+        // 手動指定 WebSocket 位址
         wsUrl = customWs.startsWith('ws') ? customWs : `ws://${customWs}`;
-    } else if (location.protocol === 'https:') {
-        // 如果透過 HTTPS 訪問 (例如 ngrok / cloudflare / 自訂網域)
-        wsUrl = `wss://${location.hostname}:8080`;
-    } else if (location.hostname && location.hostname !== 'localhost' && location.hostname !== '') {
-        // 如果透過區域網路 IP (例如 192.168.x.x) 或外網 IP 訪問
-        wsUrl = `ws://${location.hostname}:8080`;
-    } else {
-        // 本機預設
+    } else if (location.protocol === 'file:' || location.hostname === '' || location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
+        // 本機開發模式：直連 Workerman 端口
         wsUrl = 'ws://127.0.0.1:8080';
+    } else if (location.protocol === 'https:') {
+        // 雲端 HTTPS：使用 Nginx WSS 反向代理
+        wsUrl = `wss://${location.host}/ws`;
+    } else {
+        // 雲端 HTTP 或區域網路：使用 Nginx WS 反向代理
+        wsUrl = `ws://${location.host}/ws`;
     }
 
     let ws = null;
@@ -818,6 +820,37 @@
     nicknameInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') saveNickname();
     });
+
+    // ==== 複製邀請連結 ====
+    window.copyInviteLink = function() {
+        const url = new URL(window.location.href);
+        if (currentRoomId) {
+            url.searchParams.set('room', currentRoomId);
+        }
+        const inviteUrl = url.toString();
+
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(inviteUrl).then(() => {
+                showToast(`📋 已複製 ${currentRoomName || '房間'} 邀請連結！`);
+            }).catch(() => {
+                promptCopyFallback(inviteUrl);
+            });
+        } else {
+            promptCopyFallback(inviteUrl);
+        }
+    };
+
+    function promptCopyFallback(text) {
+        window.prompt('請複製此通話連結發送給好友：', text);
+    }
+
+    // ==== 自動加入 URL 指定的房間 (如果有 ?room=xxx) ====
+    const initialRoom = urlParams.get('room');
+    if (initialRoom && roomNameMap[initialRoom]) {
+        setTimeout(() => {
+            if (window.joinRoom) window.joinRoom(initialRoom);
+        }, 600);
+    }
 
     // ==== Toast 提示 ====
     let toastTimeout = null;
