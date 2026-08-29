@@ -32,7 +32,7 @@
             --radius-full: 9999px;
             
             --shadow-lg: 0 12px 36px rgba(0, 0, 0, 0.5);
-            --font: 'Inter', system-ui, -apple-system, sans-serif;
+            --font: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             --safe-bottom: env(safe-area-inset-bottom, 12px);
         }
 
@@ -54,7 +54,7 @@
             display: flex;
         }
 
-        /* 伺服器圖示欄 (桌面端顯示，手機端收合) */
+        /* 伺服器最左圖示欄 */
         .server-rail {
             width: 72px;
             background: #090a0f;
@@ -418,7 +418,7 @@
             background: #22293e;
         }
 
-        /* 視訊 Grid 區域 (手機端自適應排列) */
+        /* 視訊 Grid 區域 */
         .video-grid-container {
             flex: 1;
             padding: 14px 14px calc(90px + var(--safe-bottom)) 14px;
@@ -523,7 +523,7 @@
             color: var(--accent-red);
         }
 
-        /* 浮動通話控制按鈕條 (支援手機橫直螢幕) */
+        /* 浮動通話控制按鈕條 */
         .floating-action-bar {
             position: absolute;
             bottom: calc(16px + var(--safe-bottom));
@@ -697,12 +697,9 @@
             transform: translateX(-50%) translateY(0);
         }
 
-        /* =======================================================
-           📱 手機版專屬響應式規則 (Mobile RWD Media Queries)
-           ======================================================= */
         @media (max-width: 768px) {
             .server-rail {
-                display: none; /* 手機端收起最左圖示欄 */
+                display: none;
             }
 
             .sidebar {
@@ -733,7 +730,6 @@
                 padding: 0 12px;
             }
 
-            /* 手機通話中：視訊在直螢幕下的極致排版 */
             .video-grid-container {
                 padding: 10px 10px calc(80px + var(--safe-bottom)) 10px;
                 grid-template-columns: 1fr !important;
@@ -784,7 +780,7 @@
     <!-- 手機端側邊欄遮罩 -->
     <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="toggleMobileSidebar()"></div>
 
-    <!-- 頻道與房間側邊欄 (手機端抽屜式滑出) -->
+    <!-- 頻道與房間側邊欄 -->
     <aside class="sidebar" id="sidebar">
         <div class="sidebar-header">
             <div style="display:flex; align-items:center;">
@@ -853,7 +849,7 @@
 
     <!-- 主通話舞台 -->
     <main class="main-stage">
-        <!-- 頂部標題列 (手機版含選單切換按鈕) -->
+        <!-- 頂部標題列 -->
         <header class="stage-header" id="stageHeader" style="display:none;">
             <div class="stage-room-title">
                 <button class="btn-menu-mobile" onclick="toggleMobileSidebar()">
@@ -904,7 +900,7 @@
 
         <!-- 視訊畫面區域 Video Grid -->
         <section class="video-grid-container" id="videoGrid" style="display:none;">
-            <!-- 本端視訊方塊 (手機相容 playsinline) -->
+            <!-- 本端視訊方塊 -->
             <div class="video-tile is-local" id="localVideoTile">
                 <video id="localVideo" autoplay muted playsinline webkit-playsinline></video>
                 <div class="avatar-placeholder" id="localAvatarPlaceholder" style="display:none;">
@@ -921,7 +917,7 @@
             </div>
         </section>
 
-        <!-- 底部浮動通話按鈕條 (手機舒適觸控) -->
+        <!-- 底部浮動通話按鈕條 -->
         <div class="floating-action-bar hidden" id="floatingActionBar">
             <!-- 1. 螢幕分享 -->
             <button class="call-btn btn-screen" id="btnShareScreen" title="螢幕分享" onclick="toggleScreenShare()">
@@ -937,7 +933,7 @@
                 </svg>
             </button>
 
-            <!-- 3. 鏡頭切換 (白色按鈕) -->
+            <!-- 3. 鏡頭切換 -->
             <button class="call-btn btn-camera" id="btnCamera" title="開關鏡頭" onclick="toggleCamera()">
                 <svg id="camIconOn" viewBox="0 0 24 24">
                     <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/>
@@ -982,7 +978,6 @@
     <div class="toast" id="toastMsg">已複製房間連結</div>
 
     <script>
-        // 手機端側邊欄切換
         function toggleMobileSidebar() {
             const sidebar = document.getElementById('sidebar');
             const backdrop = document.getElementById('sidebarBackdrop');
@@ -997,7 +992,6 @@
         }
 
         function handleRoomClick(roomId) {
-            // 手機端點選房間後自動收合側邊欄
             const sidebar = document.getElementById('sidebar');
             const backdrop = document.getElementById('sidebarBackdrop');
             if (sidebar.classList.contains('mobile-open')) {
