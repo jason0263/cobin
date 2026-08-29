@@ -214,6 +214,7 @@ $ws_worker->onMessage = function($connection, $data) use (&$clients, $roomNames)
             case 'media-state':
                 $connection->micState = $msg['mic'] ?? true;
                 $connection->cameraState = $msg['camera'] ?? true;
+                $connection->isScreen = $msg['isScreen'] ?? false;
 
                 if (!empty($connection->roomId)) {
                     foreach ($clients as $c) {
@@ -222,7 +223,8 @@ $ws_worker->onMessage = function($connection, $data) use (&$clients, $roomNames)
                                 'type' => 'user-media-state',
                                 'uid' => $connection->uid,
                                 'mic' => $connection->micState,
-                                'camera' => $connection->cameraState
+                                'camera' => $connection->cameraState,
+                                'isScreen' => $connection->isScreen
                             ]));
                         }
                     }

@@ -443,7 +443,7 @@
             background: #22293e;
         }
 
-        /* 視訊 Grid 區域 */
+        /* 視訊 Grid 區域 (支援網格模式與大屏幕 Spotlight 模式) */
         .video-grid-container {
             flex: 1;
             padding: 14px 14px calc(90px + var(--safe-bottom)) 14px;
@@ -454,10 +454,54 @@
             justify-content: center;
             overflow-y: auto;
             height: 100%;
+            transition: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
         }
 
         .video-grid-container.single-user {
             grid-template-columns: minmax(280px, 800px);
+        }
+
+        /* 🌟 大屏幕焦點模式 (Spotlight / 螢幕分享展示佈局) */
+        .video-grid-container.spotlight-mode {
+            display: flex;
+            flex-direction: row;
+            gap: 14px;
+            padding: 14px 14px calc(90px + var(--safe-bottom)) 14px;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        .video-grid-container.spotlight-mode .video-tile.is-spotlight {
+            flex: 1;
+            height: 100%;
+            max-height: calc(100vh - 170px);
+            aspect-ratio: auto;
+            border-color: rgba(88, 101, 242, 0.6);
+            box-shadow: 0 16px 48px rgba(0, 0, 0, 0.7);
+            z-index: 5;
+        }
+
+        .video-grid-container.spotlight-mode .video-tile.is-spotlight video {
+            object-fit: contain !important; /* 螢幕分享完整展示不裁切文字 */
+            background: #000;
+        }
+
+        .video-grid-container.spotlight-mode .thumbnails-strip {
+            width: 220px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            overflow-y: auto;
+            flex-shrink: 0;
+            padding-right: 4px;
+        }
+
+        .video-grid-container.spotlight-mode .thumbnails-strip .video-tile {
+            width: 100%;
+            height: 130px;
+            aspect-ratio: 16 / 9;
+            flex-shrink: 0;
+            cursor: pointer;
         }
 
         .video-tile {
@@ -471,21 +515,81 @@
             display: flex;
             align-items: center;
             justify-content: center;
+            cursor: pointer;
+            transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1), border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .video-tile:hover {
+            border-color: rgba(255, 255, 255, 0.25);
+        }
+
+        .video-tile.is-screen {
+            border-color: rgba(88, 101, 242, 0.8) !important;
+        }
+
+        .video-tile.is-screen video {
+            object-fit: contain !important;
+            background: #000;
         }
 
         .video-tile.speaking {
-            border-color: var(--accent-green);
-            box-shadow: 0 0 20px rgba(35, 165, 90, 0.4);
+            border-color: var(--accent-green) !important;
+            box-shadow: 0 0 24px rgba(35, 165, 90, 0.45);
         }
 
         .video-tile video {
             width: 100%;
             height: 100%;
             object-fit: cover;
+            background: #0d1017;
         }
 
         .video-tile.is-local:not(.is-screen) video {
             transform: scaleX(-1);
+        }
+
+        /* 視訊懸浮工具列 (放大/全螢幕) */
+        .tile-actions-bar {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            display: flex;
+            gap: 6px;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+            z-index: 10;
+        }
+
+        .video-tile:hover .tile-actions-bar,
+        .video-tile:active .tile-actions-bar,
+        .video-tile.is-spotlight .tile-actions-bar {
+            opacity: 1;
+        }
+
+        .tile-btn {
+            background: rgba(0, 0, 0, 0.65);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            color: #fff;
+            width: 32px;
+            height: 32px;
+            border-radius: var(--radius-sm);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .tile-btn:hover {
+            background: var(--accent);
+            transform: scale(1.08);
+        }
+
+        .tile-btn svg {
+            width: 16px;
+            height: 16px;
+            fill: currentColor;
         }
 
         .video-tile .avatar-placeholder {
@@ -536,6 +640,16 @@
             align-items: center;
             gap: 6px;
             z-index: 2;
+        }
+
+        .screen-badge {
+            background: var(--accent);
+            color: #fff;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.3px;
         }
 
         .mic-status-icon {
@@ -761,10 +875,39 @@
                 gap: 10px;
             }
 
+            .video-grid-container.spotlight-mode {
+                flex-direction: column !important;
+                gap: 8px;
+            }
+
+            .video-grid-container.spotlight-mode .video-tile.is-spotlight {
+                flex: 1 1 auto;
+                width: 100%;
+                max-height: 55vh;
+                min-height: 220px;
+            }
+
+            .video-grid-container.spotlight-mode .thumbnails-strip {
+                width: 100%;
+                height: 80px;
+                flex-direction: row;
+                overflow-x: auto;
+                overflow-y: hidden;
+                padding-bottom: 4px;
+            }
+
+            .video-grid-container.spotlight-mode .thumbnails-strip .video-tile {
+                width: 120px;
+                height: 100%;
+                min-height: unset;
+                max-height: unset;
+                flex-shrink: 0;
+            }
+
             .video-tile {
                 aspect-ratio: auto;
                 height: 100%;
-                min-height: 200px;
+                min-height: 180px;
                 max-height: 48vh;
             }
 
@@ -930,7 +1073,12 @@
 
         <!-- 視訊畫面區域 Video Grid -->
         <section class="video-grid-container" id="videoGrid" style="display:none;">
-            <div class="video-tile is-local" id="localVideoTile">
+            <div class="video-tile is-local" id="localVideoTile" ondblclick="toggleTileFullscreen('localVideoTile')" onclick="handleTileClick('local')">
+                <div class="tile-actions-bar">
+                    <button class="tile-btn" title="放大至大屏幕" onclick="toggleSpotlight('local', event)">
+                        <svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
+                    </button>
+                </div>
                 <video id="localVideo" autoplay muted playsinline webkit-playsinline></video>
                 <div class="avatar-placeholder" id="localAvatarPlaceholder" style="display:none;">
                     <div class="avatar-circle-lg" id="localAvatarCircle">U</div>
@@ -942,8 +1090,10 @@
                         <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
                     </svg>
                     <span id="localTagLabel">我 (You)</span>
+                    <span class="screen-badge" id="localScreenBadge" style="display:none;">螢幕分享</span>
                 </div>
             </div>
+            <div class="thumbnails-strip" id="thumbnailsStrip" style="display:none;"></div>
         </section>
 
         <!-- 底部浮動通話按鈕條 -->

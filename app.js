@@ -205,7 +205,7 @@
                     break;
 
                 case 'user-media-state':
-                    handleUserMediaState(data.uid, data.mic, data.camera);
+                    handleUserMediaState(data.uid, data.mic, data.camera, data.isScreen);
                     break;
 
                 case 'left-room':
@@ -373,7 +373,10 @@
                 peers[uid].videoTile.remove();
             }
             delete peers[uid];
-            adjustGridColumns();
+            if (spotlightUid === uid) {
+                spotlightUid = null;
+            }
+            updateStageLayout();
         }
     }
 
@@ -501,9 +504,16 @@
             tile = document.createElement('div');
             tile.className = 'video-tile';
             tile.id = `tile-${uid}`;
+            tile.onclick = () => window.handleTileClick(uid);
+            tile.ondblclick = () => window.toggleTileFullscreen(`tile-${uid}`);
             const initial = (nickname || 'U').charAt(0).toUpperCase();
 
             tile.innerHTML = `
+                <div class="tile-actions-bar">
+                    <button class="tile-btn" title="放大至大屏幕" onclick="toggleSpotlight('${uid}', event)">
+                        <svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
+                    </button>
+                </div>
                 <video autoplay playsinline></video>
                 <div class="avatar-placeholder" id="avatar-${uid}" style="display:none;">
                     <div class="avatar-circle-lg">${initial}</div>
@@ -515,21 +525,22 @@
                         <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
                     </svg>
                     <span>${escapeHtml(nickname)}</span>
+                    <span class="screen-badge" id="screen-badge-${uid}" style="display:none;">螢幕分享</span>
                 </div>
             `;
             videoGrid.appendChild(tile);
-            adjustGridColumns();
+            updateStageLayout();
         }
         return tile;
     }
 
     // ==== 遠端媒體狀態 ====
-    function handleUserMediaState(uid, mic, camera) {
+    function handleUserMediaState(uid, mic, camera, isScreen) {
         const peer = peers[uid];
         if (!peer) return;
 
         if (peer.avatarEl) {
-            peer.avatarEl.style.display = camera ? 'none' : 'flex';
+            peer.avatarEl.style.display = (camera || isScreen) ? 'none' : 'flex';
         }
         if (peer.micIcon) {
             if (mic) {
@@ -537,6 +548,99 @@
             } else {
                 peer.micIcon.classList.add('muted');
             }
+        }
+
+        const tile = document.getElementById(`tile-${uid}`);
+        const screenBadge = document.getElementById(`screen-badge-${uid}`);
+
+        if (isScreen) {
+            if (tile) tile.classList.add('is-screen');
+            if (screenBadge) screenBadge.style.display = 'inline-block';
+            spotlightUid = uid; // 遠端開啟螢幕分享時自動放大至大屏幕
+            updateStageLayout();
+            showToast(`🖥️ ${peer.nickname || '成員'} 正在分享螢幕`);
+        } else {
+            if (tile) tile.classList.remove('is-screen');
+            if (screenBadge) screenBadge.style.display = 'none';
+            if (spotlightUid === uid) {
+                spotlightUid = null;
+                updateStageLayout();
+            }
+        }
+    }
+
+    // ==== 🌟 大屏幕 Spotlight 與放大控制 ====
+    let spotlightUid = null;
+    const thumbnailsStrip = document.getElementById('thumbnailsStrip');
+    const localScreenBadge = document.getElementById('localScreenBadge');
+
+    window.toggleSpotlight = function(uid, event) {
+        if (event) event.stopPropagation();
+        if (spotlightUid === uid) {
+            spotlightUid = null; // 取消大屏幕，還原回網格
+        } else {
+            spotlightUid = uid; // 放大指定成員至大屏幕
+        }
+        updateStageLayout();
+    };
+
+    window.handleTileClick = function(uid) {
+        if (spotlightUid !== uid) {
+            spotlightUid = uid;
+            updateStageLayout();
+        }
+    };
+
+    window.toggleTileFullscreen = function(tileId, event) {
+        if (event) event.stopPropagation();
+        const elem = document.getElementById(tileId);
+        if (!elem) return;
+
+        if (!document.fullscreenElement) {
+            if (elem.requestFullscreen) {
+                elem.requestFullscreen();
+            } else if (elem.webkitRequestFullscreen) {
+                elem.webkitRequestFullscreen();
+            }
+        } else {
+            if (document.exitFullscreen) {
+                document.exitFullscreen();
+            }
+        }
+    };
+
+    function updateStageLayout() {
+        if (!videoGrid || !thumbnailsStrip) return;
+
+        const allTiles = [
+            { uid: 'local', el: localVideoTile },
+            ...Object.keys(peers).map(uid => ({ uid, el: document.getElementById(`tile-${uid}`) }))
+        ].filter(t => t.el !== null);
+
+        if (spotlightUid) {
+            // 大屏幕 Spotlight 模式
+            videoGrid.className = 'video-grid-container spotlight-mode';
+            thumbnailsStrip.style.display = 'flex';
+
+            allTiles.forEach(t => {
+                if (t.uid === spotlightUid) {
+                    t.el.classList.add('is-spotlight');
+                    videoGrid.insertBefore(t.el, thumbnailsStrip);
+                } else {
+                    t.el.classList.remove('is-spotlight');
+                    thumbnailsStrip.appendChild(t.el);
+                }
+            });
+        } else {
+            // 網格模式
+            videoGrid.className = 'video-grid-container';
+            thumbnailsStrip.style.display = 'none';
+
+            allTiles.forEach(t => {
+                t.el.classList.remove('is-spotlight');
+                videoGrid.appendChild(t.el);
+            });
+            adjustGridColumns();
         }
     }
 
@@ -556,14 +660,28 @@
 
                 localVideo.srcObject = screenStream;
                 localVideoTile.classList.add('is-screen');
+                if (localScreenBadge) localScreenBadge.style.display = 'inline-block';
                 isScreenSharing = true;
                 btnShareScreen.classList.add('active');
+
+                // 自動放大至大屏幕
+                spotlightUid = 'local';
+                updateStageLayout();
+
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({
+                        type: 'media-state',
+                        mic: isMicEnabled,
+                        camera: isCameraEnabled,
+                        isScreen: true
+                    }));
+                }
 
                 screenTrack.onended = () => {
                     stopScreenShare();
                 };
 
-                showToast('🖥️ 已開啟螢幕分享');
+                showToast('🖥️ 已開啟螢幕分享 (已展示在大屏幕)');
             } catch (err) {
                 console.error('[Cobin] 螢幕分享失敗:', err);
             }
@@ -591,8 +709,24 @@
         }
 
         localVideoTile.classList.remove('is-screen');
+        if (localScreenBadge) localScreenBadge.style.display = 'none';
         isScreenSharing = false;
         btnShareScreen.classList.remove('active');
+
+        if (spotlightUid === 'local') {
+            spotlightUid = null;
+            updateStageLayout();
+        }
+
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({
+                type: 'media-state',
+                mic: isMicEnabled,
+                camera: isCameraEnabled,
+                isScreen: false
+            }));
+        }
+
         showToast('⏹️ 螢幕分享已結束');
     }
 
@@ -705,6 +839,9 @@
 
         currentRoomId = null;
         currentRoomName = '';
+
+        spotlightUid = null;
+        updateStageLayout();
 
         document.querySelectorAll('.room-item').forEach(el => el.classList.remove('active'));
         stageHeader.style.display = 'none';
