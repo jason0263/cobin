@@ -404,40 +404,45 @@
             pendingCandidates: []
         };
 
-        // 預先加入 Transceivers 確保雙向音視訊通暢
-        try {
-            pc.addTransceiver('audio', { direction: 'sendrecv' });
-            pc.addTransceiver('video', { direction: 'sendrecv' });
-        } catch (e) {}
-
-        // 加入本地軌道
+        // 加入本地軌道 (若本地已有鏡頭或麥克風)
         if (localStream) {
             localStream.getTracks().forEach(track => {
                 try {
-                    const senders = pc.getSenders();
-                    const sender = senders.find(s => s.track && s.track.kind === track.kind);
-                    if (sender) {
-                        sender.replaceTrack(track);
-                    } else {
-                        pc.addTrack(track, localStream);
-                    }
+                    pc.addTrack(track, localStream);
                 } catch (e) {}
             });
         }
 
-        // 接收遠端軌道
+        // 接收遠端軌道 (累加至 remoteStream，確保音訊絕不丟失)
         pc.ontrack = (event) => {
-            console.log(`[Cobin] 收到遠端軌道 (${targetNickname || targetUid}):`, event.track.kind);
-            const remoteStream = event.streams[0] || new MediaStream([event.track]);
+            console.log(`[Cobin] 收到遠端軌道 (${targetNickname || targetUid}): ${event.track.kind}`);
             const peerObj = peers[targetUid];
-            if (peerObj && peerObj.videoEl) {
-                peerObj.videoEl.srcObject = remoteStream;
-                peerObj.videoEl.playsInline = true;
-                peerObj.videoEl.autoplay = true;
+            if (!peerObj) return;
+
+            if (!peerObj.remoteStream) {
+                peerObj.remoteStream = new MediaStream();
+                if (peerObj.videoEl) {
+                    peerObj.videoEl.srcObject = peerObj.remoteStream;
+                    peerObj.videoEl.playsInline = true;
+                    peerObj.videoEl.autoplay = true;
+                }
+            }
+
+            // 替換同種類軌道或新增
+            const existingTrack = peerObj.remoteStream.getTracks().find(t => t.kind === event.track.kind);
+            if (existingTrack) {
+                peerObj.remoteStream.removeTrack(existingTrack);
+            }
+            peerObj.remoteStream.addTrack(event.track);
+
+            if (peerObj.videoEl) {
                 peerObj.videoEl.play().catch(err => {
-                    console.warn('[Cobin] 遠端視訊自動播放受限:', err);
+                    console.warn('[Cobin] 遠端媒體自動播放受限:', err);
                 });
-                setupRemoteAudioAnalysis(remoteStream, targetUid);
+            }
+
+            if (event.track.kind === 'audio') {
+                setupRemoteAudioAnalysis(peerObj.remoteStream, targetUid);
             }
         };
 
@@ -774,11 +779,27 @@
                     if (!pc) continue;
                     try {
                         const senders = pc.getSenders();
-                        const videoSender = senders.find(s => s.track && s.track.kind === 'video') || senders.find(s => s.kind === 'video');
+                        const videoSender = senders.find(s => s.track && s.track.kind === 'video');
                         if (videoSender) {
                             await videoSender.replaceTrack(screenTrack);
                         } else {
+                            // 新增螢幕軌道並重新發起協商
                             pc.addTrack(screenTrack, screenStream);
+                            const offer = await pc.createOffer({
+                                offerToReceiveAudio: true,
+                                offerToReceiveVideo: true
+                            });
+                            await pc.setLocalDescription(offer);
+                            if (ws && ws.readyState === WebSocket.OPEN) {
+                                ws.send(JSON.stringify({
+                                    type: 'signal',
+                                    targetUid: uid,
+                                    signal: {
+                                        type: 'offer',
+                                        sdp: pc.localDescription.sdp
+                                    }
+                                }));
+                            }
                         }
                     } catch (e) {
                         console.warn('[Cobin] 替換螢幕軌道警告:', e);
@@ -829,22 +850,25 @@
         }
 
         // 恢復本地鏡頭視訊軌道
-        if (localStream) {
-            const camTrack = localStream.getVideoTracks()[0];
-            for (const uid in peers) {
-                const pc = peers[uid].pc;
-                if (!pc) continue;
-                try {
-                    const senders = pc.getSenders();
-                    const videoSender = senders.find(s => s.track && s.track.kind === 'video') || senders.find(s => s.kind === 'video');
-                    if (videoSender && camTrack) {
-                        await videoSender.replaceTrack(camTrack);
-                    }
-                } catch (e) {}
-            }
-            if (localVideo) {
+        const camTrack = localStream ? localStream.getVideoTracks()[0] : null;
+        for (const uid in peers) {
+            const pc = peers[uid].pc;
+            if (!pc) continue;
+            try {
+                const senders = pc.getSenders();
+                const videoSender = senders.find(s => s.track && s.track.kind === 'video');
+                if (videoSender) {
+                    await videoSender.replaceTrack(camTrack || null);
+                }
+            } catch (e) {}
+        }
+
+        if (localVideo) {
+            if (localStream) {
                 localVideo.srcObject = localStream;
                 localVideo.play().catch(() => {});
+            } else {
+                localVideo.srcObject = null;
             }
         }
 
