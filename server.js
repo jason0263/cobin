@@ -1,28 +1,32 @@
-// server.js - Cobin Voice & Video 雲端一體化伺服器 (支援 Render.com 24/7 雲端部署)
+// server.js (Root entry for Render.com)
 
 const http = require('http');
 const path = require('path');
+const fs = require('fs');
 const express = require('express');
 const { WebSocketServer, WebSocket } = require('ws');
 
 const app = express();
 const PORT = process.env.PORT || 8080;
 
-// 1. 提供前端靜態檔案託管
-app.use(express.static(__dirname));
+// 自動尋找 index.html 所在目錄 (支援根目錄與 cobin/ 子目錄)
+const staticDir = fs.existsSync(path.join(__dirname, 'cobin', 'index.html')) 
+    ? path.join(__dirname, 'cobin') 
+    : __dirname;
 
-// 根目錄直接訪問首頁
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
+console.log(`[Cobin] 靜態檔案目錄: ${staticDir}`);
+app.use(express.static(staticDir));
+app.use('/cobin/cobin', express.static(staticDir));
+app.use('/cobin', express.static(staticDir));
+
+app.get('*', (req, res) => {
+    res.sendFile(path.join(staticDir, 'index.html'));
 });
 
-// 建立 HTTP 伺服器
 const server = http.createServer(app);
-
-// 2. 建立 WebSocket 信令伺服器 (共享同一個 HTTP 伺服器與連接埠)
 const wss = new WebSocketServer({ server });
 
-const clients = new Map(); // uid -> { ws, uid, nickname, roomId, micState, cameraState, isScreen, avatar }
+const clients = new Map();
 const roomNames = {
     'room-1': '語音大廳 1',
     'room-2': '遊戲開黑 2',
@@ -32,11 +36,7 @@ const roomNames = {
 function getRoomsStatusArray() {
     const status = {};
     for (const [rId, rName] of Object.entries(roomNames)) {
-        status[rId] = {
-            id: rId,
-            name: rName,
-            users: []
-        };
+        status[rId] = { id: rId, name: rName, users: [] };
     }
 
     for (const client of clients.values()) {
@@ -82,7 +82,6 @@ wss.on('connection', (ws) => {
 
     console.log(`[WebSocket 連線建立] UID: ${uid}`);
 
-    // 發送初始化確認與當前房間在線狀態
     ws.send(JSON.stringify({
         type: 'init-ack',
         uid: uid,
@@ -92,26 +91,18 @@ wss.on('connection', (ws) => {
 
     ws.on('message', (message) => {
         let msg;
-        try {
-            msg = JSON.parse(message);
-        } catch (e) {
-            return;
-        }
-
+        try { msg = JSON.parse(message); } catch (e) { return; }
         if (!msg || !msg.type) return;
 
         switch (msg.type) {
             case 'init':
-                if (msg.nickname) {
-                    clientData.nickname = String(msg.nickname).trim();
-                }
+                if (msg.nickname) clientData.nickname = String(msg.nickname).trim();
                 broadcastRoomsStatus();
                 break;
 
             case 'join-room': {
                 const targetRoomId = roomNames[msg.roomId] ? msg.roomId : 'room-1';
 
-                // 若先前在其他房間，通知舊房間成員離開
                 if (clientData.roomId && clientData.roomId !== targetRoomId) {
                     const oldRoomId = clientData.roomId;
                     for (const other of clients.values()) {
@@ -130,7 +121,6 @@ wss.on('connection', (ws) => {
                 clientData.micState = msg.micState !== undefined ? Boolean(msg.micState) : true;
                 clientData.cameraState = msg.cameraState !== undefined ? Boolean(msg.cameraState) : true;
 
-                // 取得同房間的其他已有成員
                 const existingUsers = [];
                 for (const other of clients.values()) {
                     if (other.uid !== uid && other.roomId === targetRoomId) {
@@ -144,7 +134,6 @@ wss.on('connection', (ws) => {
                     }
                 }
 
-                // 回傳成功加入房間訊息 (包含房間已有成員)
                 ws.send(JSON.stringify({
                     type: 'joined-room',
                     roomId: targetRoomId,
@@ -152,7 +141,6 @@ wss.on('connection', (ws) => {
                     users: existingUsers
                 }));
 
-                // 通知同房間其他人有新成員加入
                 for (const other of clients.values()) {
                     if (other.uid !== uid && other.roomId === targetRoomId && other.ws.readyState === WebSocket.OPEN) {
                         other.ws.send(JSON.stringify({
@@ -266,6 +254,5 @@ server.listen(PORT, '0.0.0.0', () => {
     console.log(`====================================================`);
     console.log(`🚀 Cobin Voice & Video 雲端伺服器已啟動`);
     console.log(`📡 監聽連接埠: ${PORT}`);
-    console.log(`🌐 靜態網頁與 WebSocket 同步就緒！`);
     console.log(`====================================================`);
 });
