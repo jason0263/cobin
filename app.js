@@ -308,23 +308,47 @@
         }));
     }
 
-    // ==== 初始化本地媒體 ====
+    // ==== 📱 手機端音訊全域解鎖器 (解決 iOS / Android 揚聲器靜音與自動播放政策) ====
+    function unlockMobileAudio() {
+        if (audioContext && audioContext.state === 'suspended') {
+            audioContext.resume().catch(() => {});
+        }
+        document.querySelectorAll('audio, video').forEach(el => {
+            if (el.srcObject && el.paused) {
+                el.play().catch(() => {});
+            }
+        });
+    }
+    window.addEventListener('click', unlockMobileAudio, { passive: true });
+    window.addEventListener('touchstart', unlockMobileAudio, { passive: true });
+
+    // ==== 初始化本地媒體 (支援手機降級與高音質通話配置) ====
     async function initLocalMedia() {
         if (!localStream) {
+            const audioConstraints = {
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true
+            };
+
             try {
+                // 優先請求鏡頭 + 麥克風
                 localStream = await navigator.mediaDevices.getUserMedia({
                     video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' },
-                    audio: true
+                    audio: audioConstraints
                 });
             } catch (e) {
+                console.warn('[Cobin] 請求相機失敗，降級為純麥克風語音:', e);
                 try {
+                    // 降級為純麥克風
                     localStream = await navigator.mediaDevices.getUserMedia({
                         video: false,
-                        audio: true
+                        audio: audioConstraints
                     });
                     isCameraEnabled = false;
                 } catch (e2) {
                     console.error('[Cobin] 存取麥克風失敗:', e2);
+                    showToast('⚠️ 請允許存取麥克風以進行語音通話');
                 }
             }
 
@@ -376,6 +400,9 @@
             if (peers[uid].videoTile) {
                 peers[uid].videoTile.remove();
             }
+            const audioEl = document.getElementById(`audio-${uid}`);
+            if (audioEl) audioEl.remove();
+
             delete peers[uid];
             if (spotlightUid === uid) {
                 spotlightUid = null;
@@ -394,17 +421,31 @@
         const tile = ensureUserVideoTile(targetUid, targetNickname);
         const videoEl = tile.querySelector('video');
 
+        // 建立獨立隱藏的 <audio> 播放器 (雙保險保證手機揚聲器 100% 播放)
+        let audioEl = document.getElementById(`audio-${targetUid}`);
+        if (!audioEl) {
+            audioEl = document.createElement('audio');
+            audioEl.id = `audio-${targetUid}`;
+            audioEl.autoplay = true;
+            audioEl.playsInline = true;
+            audioEl.setAttribute('playsinline', '');
+            audioEl.setAttribute('webkit-playsinline', '');
+            audioEl.style.display = 'none';
+            document.body.appendChild(audioEl);
+        }
+
         peers[targetUid] = {
             pc: pc,
             nickname: targetNickname,
             videoTile: tile,
             videoEl: videoEl,
+            audioEl: audioEl,
             avatarEl: tile.querySelector('.avatar-placeholder'),
             micIcon: tile.querySelector('.mic-status-icon'),
             pendingCandidates: []
         };
 
-        // 加入本地軌道 (若本地已有鏡頭或麥克風)
+        // 加入本地軌道
         if (localStream) {
             localStream.getTracks().forEach(track => {
                 try {
@@ -413,7 +454,7 @@
             });
         }
 
-        // 接收遠端軌道 (累加至 remoteStream，確保音訊絕不丟失)
+        // 接收遠端軌道 (雙通道綁定，確保音訊與視訊 100% 同步)
         pc.ontrack = (event) => {
             console.log(`[Cobin] 收到遠端軌道 (${targetNickname || targetUid}): ${event.track.kind}`);
             const peerObj = peers[targetUid];
@@ -421,23 +462,27 @@
 
             if (!peerObj.remoteStream) {
                 peerObj.remoteStream = new MediaStream();
-                if (peerObj.videoEl) {
-                    peerObj.videoEl.srcObject = peerObj.remoteStream;
-                    peerObj.videoEl.playsInline = true;
-                    peerObj.videoEl.autoplay = true;
-                }
             }
 
-            // 替換同種類軌道或新增
             const existingTrack = peerObj.remoteStream.getTracks().find(t => t.kind === event.track.kind);
             if (existingTrack) {
                 peerObj.remoteStream.removeTrack(existingTrack);
             }
             peerObj.remoteStream.addTrack(event.track);
 
+            // 1. 綁定視訊畫面
             if (peerObj.videoEl) {
-                peerObj.videoEl.play().catch(err => {
-                    console.warn('[Cobin] 遠端媒體自動播放受限:', err);
+                peerObj.videoEl.srcObject = peerObj.remoteStream;
+                peerObj.videoEl.playsInline = true;
+                peerObj.videoEl.autoplay = true;
+                peerObj.videoEl.play().catch(() => {});
+            }
+
+            // 2. 綁定獨立揚聲器音訊
+            if (peerObj.audioEl) {
+                peerObj.audioEl.srcObject = peerObj.remoteStream;
+                peerObj.audioEl.play().catch(err => {
+                    console.warn('[Cobin] 手機音訊待解鎖:', err);
                 });
             }
 
