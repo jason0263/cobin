@@ -528,29 +528,58 @@
         };
 
         if (isInitiator) {
-            try {
-                const offer = await pc.createOffer({
-                    offerToReceiveAudio: true,
-                    offerToReceiveVideo: true
-                });
-                await pc.setLocalDescription(offer);
-                if (ws && ws.readyState === WebSocket.OPEN) {
-                    ws.send(JSON.stringify({
-                        type: 'signal',
-                        targetUid: targetUid,
-                        signal: {
-                            type: 'offer',
-                            sdp: pc.localDescription.sdp
-                        }
-                    }));
+            // 立即發起握手
+            initiateHandshake(targetUid);
+            // 800ms 自動確保留存握手 (確保即使首次信令延遲也能 100% 打通)
+            setTimeout(() => {
+                if (peers[targetUid]?.pc && peers[targetUid].pc.connectionState !== 'connected') {
+                    console.log(`[Cobin] 觸發連線自動握手確認 (${targetNickname || targetUid})`);
+                    initiateHandshake(targetUid);
                 }
-            } catch (err) {
-                console.error('[Cobin] 建立 Offer 失敗:', err);
-            }
+            }, 800);
         }
 
         updateStageLayout();
         return pc;
+    }
+
+    // ==== 核心：發起 WebRTC 握手 Offer ====
+    async function initiateHandshake(targetUid) {
+        const peerObj = peers[targetUid];
+        if (!peerObj || !peerObj.pc) return;
+        const pc = peerObj.pc;
+
+        // 確保本地麥克風與相機軌道已完全注入
+        if (localStream) {
+            localStream.getTracks().forEach(track => {
+                const senders = pc.getSenders();
+                const exists = senders.some(s => s.track && (s.track.id === track.id || s.track.kind === track.kind));
+                if (!exists) {
+                    try { pc.addTrack(track, localStream); } catch (e) {}
+                }
+            });
+        }
+
+        try {
+            const offer = await pc.createOffer({
+                offerToReceiveAudio: true,
+                offerToReceiveVideo: true
+            });
+            await pc.setLocalDescription(offer);
+
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                    type: 'signal',
+                    targetUid: targetUid,
+                    signal: {
+                        type: 'offer',
+                        sdp: pc.localDescription.sdp
+                    }
+                }));
+            }
+        } catch (err) {
+            console.warn('[Cobin] 發起 Offer 握手重試:', err);
+        }
     }
 
     // ==== 萬能容錯 SDP 與 ICE Candidate 解析器 ====
