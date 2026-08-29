@@ -3,9 +3,24 @@
 (() => {
     console.log('[Cobin] app.js 已載入');
 
-    // ==== 基礎變數與狀態 ====
-    const wsHosts = ['127.0.0.1', 'localhost'];
-    let currentHostIndex = 0;
+    // ==== 動態解析 WebSocket 信令位址 (支援本地、區域網路與遠端網域) ====
+    const urlParams = new URLSearchParams(window.location.search);
+    const customWs = urlParams.get('ws'); // 支援自訂 ?ws=xxx 參數
+
+    let wsUrl = '';
+    if (customWs) {
+        wsUrl = customWs.startsWith('ws') ? customWs : `ws://${customWs}`;
+    } else if (location.protocol === 'https:') {
+        // 如果透過 HTTPS 訪問 (例如 ngrok / cloudflare / 自訂網域)
+        wsUrl = `wss://${location.hostname}:8080`;
+    } else if (location.hostname && location.hostname !== 'localhost' && location.hostname !== '') {
+        // 如果透過區域網路 IP (例如 192.168.x.x) 或外網 IP 訪問
+        wsUrl = `ws://${location.hostname}:8080`;
+    } else {
+        // 本機預設
+        wsUrl = 'ws://127.0.0.1:8080';
+    }
+
     let ws = null;
     let myUid = null;
     let myNickname = '用戶 ' + Math.floor(1000 + Math.random() * 9000);
@@ -91,17 +106,15 @@
     }
     updateMyProfileUI();
 
-    // ==== WebSocket 連線核心 (支援自動重試與 Host 切換) ====
+    // ==== WebSocket 連線核心 ====
     function initWebSocket() {
-        const host = wsHosts[currentHostIndex];
-        const wsUrl = `ws://${host}:8080`;
         console.log(`[Cobin] 嘗試連線至信令伺服器: ${wsUrl}`);
 
         try {
             ws = new WebSocket(wsUrl);
         } catch (err) {
             console.error('[Cobin] WebSocket 創建失敗:', err);
-            handleWsError();
+            setTimeout(initWebSocket, 2500);
             return;
         }
 
@@ -128,7 +141,7 @@
             console.warn(`[Cobin] ⚠️ WebSocket 斷線 (代碼: ${event.code})`);
             wsStatusTag.textContent = '🔴 未連線';
             wsStatusTag.style.color = 'var(--accent-red)';
-            handleWsError();
+            setTimeout(initWebSocket, 2500);
         };
 
         ws.onerror = (err) => {
