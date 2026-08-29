@@ -466,47 +466,38 @@
             });
         }
 
-        // 接收遠端軌道 (雙通道綁定，確保音訊與視訊 100% 同步)
+        // 接收遠端軌道 (雙通道純淨軌道分離，徹底解決手機黑屏與播放受限)
         pc.ontrack = (event) => {
             console.log(`[Cobin] 收到遠端軌道 (${targetNickname || targetUid}): ${event.track.kind}`);
             const peerObj = peers[targetUid];
             if (!peerObj) return;
 
-            if (!peerObj.remoteStream) {
-                peerObj.remoteStream = new MediaStream();
-            }
-
-            const existingTrack = peerObj.remoteStream.getTracks().find(t => t.kind === event.track.kind);
-            if (existingTrack) {
-                peerObj.remoteStream.removeTrack(existingTrack);
-            }
-            peerObj.remoteStream.addTrack(event.track);
-
-            // 1. 綁定視訊畫面 (手機端強制 muted 確保 100% 自動流暢渲染視訊，聲音由獨立 audio 播放)
-            if (peerObj.videoEl) {
-                peerObj.videoEl.muted = true;
-                peerObj.videoEl.playsInline = true;
-                peerObj.videoEl.setAttribute('playsinline', '');
-                peerObj.videoEl.setAttribute('webkit-playsinline', '');
-                peerObj.videoEl.srcObject = peerObj.remoteStream;
-                peerObj.videoEl.play().catch(err => {
-                    console.warn('[Cobin] 視訊播放重試:', err);
-                });
-                if (peerObj.avatarEl && event.track.kind === 'video') {
+            if (event.track.kind === 'video') {
+                // 1. 純視訊軌道綁定至 <video> 標籤 (純畫面，100% 繞過手機音訊封鎖與黑屏)
+                const videoStream = new MediaStream([event.track]);
+                if (peerObj.videoEl) {
+                    peerObj.videoEl.muted = true;
+                    peerObj.videoEl.playsInline = true;
+                    peerObj.videoEl.setAttribute('playsinline', '');
+                    peerObj.videoEl.setAttribute('webkit-playsinline', '');
+                    peerObj.videoEl.srcObject = videoStream;
+                    peerObj.videoEl.play().catch(err => {
+                        console.warn('[Cobin] 視訊播放重試:', err);
+                    });
+                }
+                if (peerObj.avatarEl) {
                     peerObj.avatarEl.style.display = 'none';
                 }
-            }
-
-            // 2. 綁定獨立揚聲器音訊 (負責手機揚聲器和耳機通話聲音)
-            if (peerObj.audioEl) {
-                peerObj.audioEl.srcObject = peerObj.remoteStream;
-                peerObj.audioEl.play().catch(err => {
-                    console.warn('[Cobin] 手機音訊待解鎖:', err);
-                });
-            }
-
-            if (event.track.kind === 'audio') {
-                setupRemoteAudioAnalysis(peerObj.remoteStream, targetUid);
+            } else if (event.track.kind === 'audio') {
+                // 2. 純音訊軌道綁定至獨立隱藏 <audio> 標籤 (揚聲器與耳機)
+                const audioStream = new MediaStream([event.track]);
+                if (peerObj.audioEl) {
+                    peerObj.audioEl.srcObject = audioStream;
+                    peerObj.audioEl.play().catch(err => {
+                        console.warn('[Cobin] 音訊播放等待解鎖:', err);
+                    });
+                }
+                setupRemoteAudioAnalysis(audioStream, targetUid);
             }
         };
 
@@ -901,7 +892,12 @@
                 }
 
                 screenStream = await navigator.mediaDevices.getDisplayMedia({
-                    video: { cursor: 'always' },
+                    video: {
+                        cursor: 'always',
+                        width: { ideal: 1920, max: 1920 },
+                        height: { ideal: 1080, max: 1080 },
+                        frameRate: { ideal: 30, max: 30 }
+                    },
                     audio: false
                 });
 
