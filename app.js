@@ -377,10 +377,58 @@
         }
     }
 
+    // ==== 🎵 語音房進出提示音系統 (Web Audio API 即時合成音效，一個高音一個低音) ====
+    function playToneSound(type) {
+        try {
+            const ctx = audioContext || new (window.AudioContext || window.webkitAudioContext)();
+            if (ctx.state === 'suspended') {
+                ctx.resume().catch(() => {});
+            }
+
+            const now = ctx.currentTime;
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+
+            if (type === 'join') {
+                // 🔔 進房高音提示 (輕快雙音階: 587Hz -> 880Hz, 叮咚~)
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(587.33, now); // D5
+                osc.frequency.setValueAtTime(880.00, now + 0.12); // A5
+
+                gain.gain.setValueAtTime(0.001, now);
+                gain.gain.linearRampToValueAtTime(0.20, now + 0.03);
+                gain.gain.linearRampToValueAtTime(0.15, now + 0.12);
+                gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.40);
+
+                osc.start(now);
+                osc.stop(now + 0.42);
+            } else if (type === 'leave') {
+                // 🚪 退房低音提示 (柔和下降階: 659Hz -> 392Hz, 咚冬~)
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(659.25, now); // E5
+                osc.frequency.setValueAtTime(392.00, now + 0.12); // G4
+
+                gain.gain.setValueAtTime(0.001, now);
+                gain.gain.linearRampToValueAtTime(0.18, now + 0.03);
+                gain.gain.linearRampToValueAtTime(0.12, now + 0.12);
+                gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.45);
+
+                osc.start(now);
+                osc.stop(now + 0.48);
+            }
+        } catch (e) {
+            console.warn('[Cobin] 提示音播放失敗:', e);
+        }
+    }
+
     // ==== 新使用者加入房間 (舊成員立即預先建立 PeerConnection 並注入本地音訊) ====
     async function handleUserJoined(user) {
         if (user.uid === myUid) return;
         showToast(`👋 ${user.nickname} 加入了房間`);
+        playToneSound('join'); // 🔔 播放高音進房提示音
         ensureUserVideoTile(user.uid, user.nickname);
 
         if (!localStream) {
@@ -395,6 +443,7 @@
     function handleUserLeft(uid) {
         if (peers[uid]) {
             showToast(`🏃 ${peers[uid].nickname || '成員'} 離開了房間`);
+            playToneSound('leave'); // 🚪 播放低音退房提示音
             if (peers[uid].pc) {
                 peers[uid].pc.close();
             }
