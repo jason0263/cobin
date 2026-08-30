@@ -830,13 +830,21 @@
         if (isInitiator) {
             // 立即發起握手
             initiateHandshake(targetUid);
-            // 800ms 自動確保留存握手 (確保即使首次信令延遲也能 100% 打通)
+            // ★ 5 秒後智能重試 (只在 signalingState 為 stable 且未連上時才重試)
+            // 修復：舊的 800ms 盲目重試會在等待 Answer 期間發送新 Offer，
+            // 導致 Answer/Offer SDP 不匹配，部分設備永遠連不上
             setTimeout(() => {
-                if (peers[targetUid]?.pc && peers[targetUid].pc.connectionState !== 'connected') {
-                    console.log(`[Cobin] 觸發連線自動握手確認 (${targetNickname || targetUid})`);
-                    initiateHandshake(targetUid);
+                const p = peers[targetUid];
+                if (p && p.pc && p.pc.connectionState !== 'connected') {
+                    if (p.pc.signalingState === 'stable') {
+                        // 上一輪握手已完成但沒連上，用 ICE restart 重試
+                        console.log(`[Cobin] 🔄 5s 智能重試 (ICE restart) (${targetNickname || targetUid})`);
+                        initiateHandshake(targetUid, true);
+                    } else {
+                        console.log(`[Cobin] ⏳ 5s 檢查：握手仍進行中 signalingState=${p.pc.signalingState} (${targetNickname || targetUid})`);
+                    }
                 }
-            }, 800);
+            }, 5000);
         }
 
         updateStageLayout();
@@ -848,6 +856,13 @@
         const peerObj = peers[targetUid];
         if (!peerObj || !peerObj.pc) return;
         const pc = peerObj.pc;
+
+        // ★ 防護：如果已經在等待 Answer (have-local-offer)，不要再發新 Offer
+        // 否則新 Offer 會覆蓋舊的，導致後來收到的 Answer 和新 Offer 不匹配
+        if (pc.signalingState === 'have-local-offer' && !isRestart) {
+            console.log(`[Cobin] ⏳ 已有待回覆的 Offer，跳過重複發送 (${targetUid})`);
+            return;
+        }
 
         // 確保本地麥克風與相機軌道已完全注入
         if (localStream) {
