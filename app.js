@@ -713,8 +713,7 @@
                 freshAudio.style.cssText = 'position:absolute;width:1px;height:1px;opacity:0.01;pointer-events:none;';
                 document.body.appendChild(freshAudio);
                 
-                // ★ 改為 true，因為我們會用 Web Audio API 來播放，避免手機阻擋 Autoplay
-                freshAudio.muted = true;
+                freshAudio.muted = false;
                 freshAudio.volume = 1.0;
                 freshAudio.srcObject = audioStream;
                 freshAudio.play().catch(e => console.warn('[Cobin] 語音自動播放受阻:', e));
@@ -1601,9 +1600,6 @@
             const analyser = audioContext.createAnalyser();
             analyser.fftSize = 256;
             source.connect(analyser);
-            
-            // ★ 將遠端音訊直接輸出到解鎖過的 AudioContext，強制突破手機的 Autoplay 限制發出聲音！
-            analyser.connect(audioContext.destination);
 
             const buffer = new Uint8Array(analyser.frequencyBinCount);
             function detectRemoteSpeaking() {
