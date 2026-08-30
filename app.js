@@ -723,7 +723,8 @@
         pc.onnegotiationneeded = async () => {
             try {
                 peerObj.makingOffer = true;
-                await pc.setLocalDescription();
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
                 if (ws && ws.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify({
                         type: 'signal',
@@ -796,7 +797,8 @@
 
                 await pc.setRemoteDescription(description);
                 if (description.type === 'offer') {
-                    await pc.setLocalDescription();
+                    const answer = await pc.createAnswer();
+                    await pc.setLocalDescription(answer);
                     if (ws && ws.readyState === WebSocket.OPEN) {
                         ws.send(JSON.stringify({
                             type: 'signal',
