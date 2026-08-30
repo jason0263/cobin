@@ -674,7 +674,7 @@
         const tile = ensureUserVideoTile(targetUid, targetNickname);
         const videoEl = tile.querySelector('video');
 
-        // 建立獨立純淨的 <audio> 播放器 (使用 position fixed 避免手機瀏覽器對 display:none 實施強制音訊省電靜音)
+        // ★ 將 <audio> 放在可見的 videoTile 內，避免手機瀏覽器對螢幕外 (-9999px) 元素強制靜音
         let oldAudioEl = document.getElementById(`audio-${targetUid}`);
         if (oldAudioEl) {
             try { oldAudioEl.pause(); oldAudioEl.srcObject = null; oldAudioEl.remove(); } catch (e) {}
@@ -685,14 +685,8 @@
         audioEl.playsInline = true;
         audioEl.setAttribute('playsinline', '');
         audioEl.setAttribute('webkit-playsinline', '');
-        audioEl.style.position = 'fixed';
-        audioEl.style.top = '-9999px';
-        audioEl.style.left = '-9999px';
-        audioEl.style.width = '1px';
-        audioEl.style.height = '1px';
-        audioEl.style.opacity = '0.01';
-        audioEl.style.pointerEvents = 'none';
-        document.body.appendChild(audioEl);
+        audioEl.style.cssText = 'position:absolute;width:0;height:0;opacity:0;pointer-events:none;';
+        tile.appendChild(audioEl);
 
         peers[targetUid] = {
             pc: pc,
@@ -759,8 +753,12 @@
                 freshAudio.playsInline = true;
                 freshAudio.setAttribute('playsinline', '');
                 freshAudio.setAttribute('webkit-playsinline', '');
-                freshAudio.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0.01;pointer-events:none;';
-                document.body.appendChild(freshAudio);
+                freshAudio.style.cssText = 'position:absolute;width:0;height:0;opacity:0;pointer-events:none;';
+                if (peerObj.videoTile) {
+                    peerObj.videoTile.appendChild(freshAudio);
+                } else {
+                    document.body.appendChild(freshAudio);
+                }
                 peerObj.audioEl = freshAudio;
 
                 freshAudio.muted = false;
@@ -975,10 +973,16 @@
 
                 const rtcDesc = parseSessionDescription(signal, 'offer');
                 if (rtcDesc) {
-                    // ★ Glare 防護：如果我們已經發了 Offer (have-local-offer)，
-                    // 收到對方的 Offer 時先回滾自己的，再接受對方的
-                    if (pc.signalingState === 'have-local-offer') {
-                        console.log(`[Cobin] ⚡ Offer 碰撞 (Glare)，回滾本地 Offer 接受遠端 (${fromNickname || fromUid})`);
+                    // ★ 完美協商 (Perfect Negotiation) 解決 Glare 碰撞
+                    const offerCollision = (pc.signalingState !== 'stable');
+                    const polite = myUid > fromUid; // 用 UID 大小決定誰是 Polite
+
+                    if (offerCollision) {
+                        if (!polite) {
+                            console.log(`[Cobin] ⚡ Offer 碰撞 (Glare)，我是 Impolite，忽略遠端 Offer (${fromNickname || fromUid})`);
+                            return; // 忽略對方的 Offer，對方會回滾並接受我的 Offer
+                        }
+                        console.log(`[Cobin] ⚡ Offer 碰撞 (Glare)，我是 Polite，回滾本地 Offer (${fromNickname || fromUid})`);
                         await pc.setLocalDescription({ type: 'rollback' });
                     }
                     await pc.setRemoteDescription(rtcDesc);
