@@ -310,7 +310,7 @@
         if (currentRoomNameTitle) currentRoomNameTitle.textContent = currentRoomName;
 
         // 1. 切換 UI
-        document.querySelectorAll('.room-item').forEach(el => el.classList.remove('active'));
+        document.querySelectorAll('.room-card, .room-item').forEach(el => el.classList.remove('active'));
         const activeItem = document.getElementById(`room-item-${roomId}`);
         if (activeItem) activeItem.classList.add('active');
 
@@ -349,6 +349,82 @@
             micState: isMicEnabled,
             cameraState: isCameraEnabled
         }));
+    }
+
+    // ==== 🎙️ 語音說話即時音量分析 (說話時觸發綠光呼吸動態) ====
+    function setupLocalAudioAnalysis(stream) {
+        try {
+            if (!stream || stream.getAudioTracks().length === 0) return;
+            const ctx = audioContext || new (window.AudioContext || window.webkitAudioContext)();
+            const source = ctx.createMediaStreamSource(stream);
+            const analyser = ctx.createAnalyser();
+            analyser.fftSize = 256;
+            analyser.smoothingTimeConstant = 0.5;
+            source.connect(analyser);
+
+            const bufferLength = analyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+
+            function checkSpeaking() {
+                if (!localStream) return;
+                analyser.getByteFrequencyData(dataArray);
+                let sum = 0;
+                for (let i = 0; i < bufferLength; i++) {
+                    sum += dataArray[i];
+                }
+                const average = sum / bufferLength;
+
+                if (localVideoTile) {
+                    if (average > 14 && isMicEnabled) {
+                        localVideoTile.classList.add('speaking');
+                    } else {
+                        localVideoTile.classList.remove('speaking');
+                    }
+                }
+                requestAnimationFrame(checkSpeaking);
+            }
+            checkSpeaking();
+        } catch (e) {
+            console.warn('[Cobin] 本地音訊分析警告:', e);
+        }
+    }
+
+    function setupRemoteAudioAnalysis(stream, uid) {
+        try {
+            if (!stream || stream.getAudioTracks().length === 0) return;
+            const ctx = audioContext || new (window.AudioContext || window.webkitAudioContext)();
+            const source = ctx.createMediaStreamSource(stream);
+            const analyser = ctx.createAnalyser();
+            analyser.fftSize = 256;
+            analyser.smoothingTimeConstant = 0.5;
+            source.connect(analyser);
+
+            const bufferLength = analyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+
+            function checkRemoteSpeaking() {
+                if (!peers[uid]) return;
+                analyser.getByteFrequencyData(dataArray);
+                let sum = 0;
+                for (let i = 0; i < bufferLength; i++) {
+                    sum += dataArray[i];
+                }
+                const average = sum / bufferLength;
+
+                const tile = peers[uid].videoTile || document.getElementById(`tile-${uid}`);
+                if (tile) {
+                    if (average > 14) {
+                        tile.classList.add('speaking');
+                    } else {
+                        tile.classList.remove('speaking');
+                    }
+                }
+                requestAnimationFrame(checkRemoteSpeaking);
+            }
+            checkRemoteSpeaking();
+        } catch (e) {
+            console.warn('[Cobin] 遠端音訊分析警告:', e);
+        }
     }
 
     // ==== 📱 手機端音訊全域解鎖器 (解決 iOS / Android 揚聲器靜音與自動播放政策) ====
@@ -1495,7 +1571,7 @@
         currentRoomName = '';
         spotlightUid = null;
 
-        document.querySelectorAll('.room-item').forEach(el => el.classList.remove('active'));
+        document.querySelectorAll('.room-card, .room-item').forEach(el => el.classList.remove('active'));
         if (stageHeader) stageHeader.style.display = 'none';
         if (videoGrid) videoGrid.style.display = 'none';
         if (floatingActionBar) floatingActionBar.classList.add('hidden');
