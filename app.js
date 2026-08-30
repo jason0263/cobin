@@ -302,6 +302,9 @@
     // ==== 核心：點擊房間立即進入通話 ====
     window.joinRoom = async function(roomId) {
         console.log('[Cobin] 點擊進入房間:', roomId);
+        // 使用者手勢當下立即解鎖音訊上下文
+        unlockMobileAudio();
+
         if (currentRoomId === roomId) return;
 
         if (currentRoomId) {
@@ -646,7 +649,7 @@
         const tile = ensureUserVideoTile(targetUid, targetNickname);
         const videoEl = tile.querySelector('video');
 
-        // 建立獨立純淨的 <audio> 播放器 (每次重進徹底新建，杜絕殘留死鎖)
+        // 建立獨立純淨的 <audio> 播放器 (使用 position fixed 避免手機瀏覽器對 display:none 實施強制音訊省電靜音)
         let oldAudioEl = document.getElementById(`audio-${targetUid}`);
         if (oldAudioEl) {
             try { oldAudioEl.pause(); oldAudioEl.srcObject = null; oldAudioEl.remove(); } catch (e) {}
@@ -657,7 +660,13 @@
         audioEl.playsInline = true;
         audioEl.setAttribute('playsinline', '');
         audioEl.setAttribute('webkit-playsinline', '');
-        audioEl.style.display = 'none';
+        audioEl.style.position = 'fixed';
+        audioEl.style.top = '-9999px';
+        audioEl.style.left = '-9999px';
+        audioEl.style.width = '1px';
+        audioEl.style.height = '1px';
+        audioEl.style.opacity = '0.01';
+        audioEl.style.pointerEvents = 'none';
         document.body.appendChild(audioEl);
 
         peers[targetUid] = {
@@ -674,9 +683,11 @@
         // 加入本地軌道 (麥克風音訊與鏡頭視訊)
         if (localStream) {
             localStream.getTracks().forEach(track => {
-                try {
-                    pc.addTrack(track, localStream);
-                } catch (e) {}
+                const senders = pc.getSenders();
+                const exists = senders.some(s => s.track && s.track.id === track.id);
+                if (!exists) {
+                    try { pc.addTrack(track, localStream); } catch (e) {}
+                }
             });
         }
 
@@ -720,7 +731,13 @@
                     
                     const triggerPlay = () => {
                         if (peerObj.audioEl) {
-                            peerObj.audioEl.play().catch(() => {});
+                            const p = peerObj.audioEl.play();
+                            if (p !== undefined) {
+                                p.catch(() => {
+                                    const banner = document.getElementById('audioUnlockBanner');
+                                    if (banner) banner.style.display = 'block';
+                                });
+                            }
                         }
                         if (audioContext && audioContext.state === 'suspended') {
                             audioContext.resume().catch(() => {});
@@ -792,7 +809,7 @@
         if (localStream) {
             localStream.getTracks().forEach(track => {
                 const senders = pc.getSenders();
-                const exists = senders.some(s => s.track && (s.track.id === track.id || s.track.kind === track.kind));
+                const exists = senders.some(s => s.track && s.track.id === track.id);
                 if (!exists) {
                     try { pc.addTrack(track, localStream); } catch (e) {}
                 }
@@ -887,7 +904,7 @@
                 if (localStream) {
                     localStream.getTracks().forEach(track => {
                         const senders = pc.getSenders();
-                        const exists = senders.some(s => s.track && (s.track.id === track.id || s.track.kind === track.kind));
+                        const exists = senders.some(s => s.track && s.track.id === track.id);
                         if (!exists) {
                             try { pc.addTrack(track, localStream); } catch (e) {}
                         }
