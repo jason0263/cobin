@@ -338,9 +338,6 @@
         startCallTimer();
         updateStageLayout();
 
-        // 📱 啟動手機後台通話守護引擎 (確保退到主畫面/切換App/玩遊戲時語音不中斷)
-        startBackgroundAudioKeeper();
-
         // 2. 獲取本地媒體 (鏡頭與麥克風)
         try {
             await initLocalMedia();
@@ -542,7 +539,7 @@
         }
 
         for (const user of existingUsers) {
-            await createPeerConnection(user.uid, user.nickname, true);
+            await createPeerConnection(user.uid, user.nickname);
         }
     }
 
@@ -606,9 +603,8 @@
         // 清理舊連線 (如果有的話)
         destroyPeer(user.uid);
 
-        // ★ isInitiator=false: 舊成員不發 Offer，等新加入的成員發起
-        // 只有一方發 Offer，徹底避免雙方同時發 Offer 的 Glare 死鎖
-        await createPeerConnection(user.uid, user.nickname, false);
+        // ★ 建立連線 (完美協商模式，雙方無差別建立)
+        await createPeerConnection(user.uid, user.nickname);
     }
 
     // ==== 徹底銷毀單個 Peer 連線 (釋放所有資源，保證下次建立全新連線) ====
@@ -654,20 +650,9 @@
         updateStageLayout();
     }
 
-    // ==== 建立 WebRTC 連線 (Mesh P2P) ====
-    async function createPeerConnection(targetUid, targetNickname, isInitiator) {
-        // 如果已存在良好的連線，直接返回 (不破壞正在運行的連線)
+    // ==== 建立 WebRTC 連線 (Perfect Negotiation) ====
+    async function createPeerConnection(targetUid, targetNickname) {
         if (peers[targetUid] && peers[targetUid].pc) {
-            const existingPc = peers[targetUid].pc;
-            if (existingPc.connectionState !== 'closed' && existingPc.connectionState !== 'failed') {
-                console.log(`[Cobin] ✅ 汁用現有良好連線 (${targetNickname || targetUid}), state=${existingPc.connectionState}`);
-                if (isInitiator) {
-                    initiateHandshake(targetUid);
-                }
-                return existingPc;
-            }
-            // 連線已關閉/失敗，銷毀重建
-            console.log(`[Cobin] ♻️ 銷毀已失效連線並重建 (${targetNickname || targetUid}), state=${existingPc.connectionState}`);
             destroyPeer(targetUid);
         }
 
@@ -675,355 +660,160 @@
         const tile = ensureUserVideoTile(targetUid, targetNickname);
         const videoEl = tile.querySelector('video');
 
-        peers[targetUid] = {
+        const peerObj = {
             pc: pc,
             nickname: targetNickname,
             videoTile: tile,
             videoEl: videoEl,
             avatarEl: tile.querySelector('.avatar-placeholder'),
             micIcon: tile.querySelector('.mic-status-icon'),
-            pendingCandidates: []
+            makingOffer: false,
+            ignoreOffer: false
         };
+        peers[targetUid] = peerObj;
 
-        // 加入本地軌道 (麥克風音訊與鏡頭視訊，保證 1 個純淨 audio m-line，杜絕雙重空軌道衝突)
+        // 加入本地軌道
         if (localStream) {
             localStream.getTracks().forEach(track => {
-                try {
-                    pc.addTrack(track, localStream);
-                } catch (e) {}
+                try { pc.addTrack(track, localStream); } catch (e) {}
             });
         }
 
-        // 接收遠端軌道 (雙通道純淨軌道分離，徹底解決手機黑屏與播放受限)
+        // 接收遠端軌道
         pc.ontrack = (event) => {
             console.log(`[Cobin] 收到遠端軌道 (${targetNickname || targetUid}): ${event.track.kind}`);
-            const peerObj = peers[targetUid];
-            if (!peerObj) return;
-
             if (event.track.kind === 'video') {
                 const videoStream = new MediaStream([event.track]);
-                if (peerObj.videoEl) {
-                    peerObj.videoEl.muted = true;
-                    peerObj.videoEl.autoplay = true;
-                    peerObj.videoEl.playsInline = true;
-                    peerObj.videoEl.setAttribute('playsinline', '');
-                    peerObj.videoEl.setAttribute('webkit-playsinline', '');
-                    peerObj.videoEl.srcObject = videoStream;
-                    const playPromise = peerObj.videoEl.play();
-                    if (playPromise !== undefined) {
-                        playPromise.catch(err => {
-                            console.warn('[Cobin] 視訊播放重試:', err);
-                        });
-                    }
+                if (videoEl) {
+                    videoEl.muted = true;
+                    videoEl.autoplay = true;
+                    videoEl.playsInline = true;
+                    videoEl.srcObject = videoStream;
+                    videoEl.play().catch(e => console.warn('[Cobin] 視訊播放受阻:', e));
                 }
-                if (peerObj.avatarEl) {
-                    peerObj.avatarEl.style.display = 'none';
-                }
-                const tile = peerObj.videoTile || document.getElementById(`tile-${targetUid}`);
-                if (tile) {
-                    tile.classList.add('is-screen');
-                }
+                if (peerObj.avatarEl) peerObj.avatarEl.style.display = 'none';
+                tile.classList.add('is-screen');
                 spotlightUid = targetUid;
                 updateStageLayout();
             } else if (event.track.kind === 'audio') {
-                // Discord 標準邏輯：優先使用 event.streams[0] (完整同步流)
                 const audioStream = (event.streams && event.streams[0]) ? event.streams[0] : new MediaStream([event.track]);
-
-                // 移除舊的殘留標籤避免疊音
+                
                 let oldAudio = document.getElementById(`audio-${targetUid}`);
                 if (oldAudio) {
                     try { oldAudio.pause(); oldAudio.srcObject = null; oldAudio.remove(); } catch (e) {}
                 }
 
-                // 動態建立乾淨的 <audio>
                 const freshAudio = document.createElement('audio');
                 freshAudio.id = `audio-${targetUid}`;
                 freshAudio.autoplay = true;
                 freshAudio.playsInline = true;
-                freshAudio.setAttribute('playsinline', '');
-                freshAudio.setAttribute('webkit-playsinline', '');
-                
-                // 為了避免被 Chromium 忽略，保持 1px 大小但完全不可見
                 freshAudio.style.cssText = 'position:absolute;width:1px;height:1px;opacity:0.01;pointer-events:none;';
-                
-                // 附加到 DOM 後才賦值 srcObject，這是許多 Android WebViews 的標準要求
                 document.body.appendChild(freshAudio);
                 
                 freshAudio.muted = false;
                 freshAudio.volume = 1.0;
                 freshAudio.srcObject = audioStream;
+                freshAudio.play().catch(e => console.warn('[Cobin] 語音自動播放受阻:', e));
 
-                freshAudio.play().catch(e => {
-                    console.warn('[Cobin] 語音自動播放受阻:', e);
-                });
-
-                // 同步波形分析
                 setupRemoteAudioAnalysis(audioStream, targetUid);
             }
         };
 
-        pc.onicecandidate = (event) => {
-            if (event.candidate && ws && ws.readyState === WebSocket.OPEN) {
+        // Perfect Negotiation: 當軌道有變動時自動發起 Offer
+        pc.onnegotiationneeded = async () => {
+            try {
+                peerObj.makingOffer = true;
+                await pc.setLocalDescription();
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({
+                        type: 'signal',
+                        targetUid: targetUid,
+                        signal: { description: pc.localDescription }
+                    }));
+                }
+            } catch (err) {
+                console.error('[Cobin] Negotiation Error:', err);
+            } finally {
+                peerObj.makingOffer = false;
+            }
+        };
+
+        // ICE Candidate 收集
+        pc.onicecandidate = ({candidate}) => {
+            if (candidate && ws && ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({
                     type: 'signal',
                     targetUid: targetUid,
-                    signal: {
-                        type: 'candidate',
-                        candidate: event.candidate.candidate,
-                        sdpMid: event.candidate.sdpMid,
-                        sdpMLineIndex: event.candidate.sdpMLineIndex
-                    }
+                    signal: { candidate }
                 }));
             }
         };
 
+        // 連線狀態與防火牆警告
         pc.onconnectionstatechange = () => {
             console.log(`[Cobin] P2P 連線狀態 (${targetNickname || targetUid}): ${pc.connectionState}`);
             if (pc.connectionState === 'connected') {
-                showToast(`🟢 已與 ${targetNickname || '成員'} 建立即時通話！`);
+                showToast(`🟢 已與 ${targetNickname || '成員'} 建立通話！`);
             } else if (pc.connectionState === 'failed') {
-                console.warn(`[Cobin] 連線異常，嘗試自動 ICE 重啟修復 (${targetNickname || targetUid})`);
-                initiateHandshake(targetUid, true);
-            }
-        };
-
-        pc.oniceconnectionstatechange = () => {
-            console.log(`[Cobin] ICE 狀態 (${targetNickname || targetUid}): ${pc.iceConnectionState}`);
-            if (pc.iceConnectionState === 'failed') {
-                console.warn(`[Cobin] ICE 穿透異常，自動重試 (${targetNickname || targetUid})`);
+                console.warn(`[Cobin] 連線異常 (${targetNickname || targetUid})`);
                 showToast(`⚠️ 網路防火牆封鎖了與 ${targetNickname || '成員'} 的連線`);
-                initiateHandshake(targetUid, true);
+                pc.restartIce();
             }
         };
-
-        if (isInitiator) {
-            // 立即發起握手
-            initiateHandshake(targetUid);
-            // ★ 5 秒後智能重試 (只在 signalingState 為 stable 且未連上時才重試)
-            // 修復：舊的 800ms 盲目重試會在等待 Answer 期間發送新 Offer，
-            // 導致 Answer/Offer SDP 不匹配，部分設備永遠連不上
-            setTimeout(() => {
-                const p = peers[targetUid];
-                if (p && p.pc && p.pc.connectionState !== 'connected') {
-                    if (p.pc.signalingState === 'stable') {
-                        // 上一輪握手已完成但沒連上，用 ICE restart 重試
-                        console.log(`[Cobin] 🔄 5s 智能重試 (ICE restart) (${targetNickname || targetUid})`);
-                        initiateHandshake(targetUid, true);
-                    } else {
-                        console.log(`[Cobin] ⏳ 5s 檢查：握手仍進行中 signalingState=${p.pc.signalingState} (${targetNickname || targetUid})`);
-                    }
-                }
-            }, 5000);
-        }
 
         updateStageLayout();
         return pc;
     }
 
-    // ==== 核心：發起 WebRTC 握手 Offer ====
-    async function initiateHandshake(targetUid, isRestart = false) {
-        const peerObj = peers[targetUid];
-        if (!peerObj || !peerObj.pc) return;
-        const pc = peerObj.pc;
-
-        // ★ 防護：如果已經在等待 Answer (have-local-offer)，不要再發新 Offer
-        // 否則新 Offer 會覆蓋舊的，導致後來收到的 Answer 和新 Offer 不匹配
-        if (pc.signalingState === 'have-local-offer' && !isRestart) {
-            console.log(`[Cobin] ⏳ 已有待回覆的 Offer，跳過重複發送 (${targetUid})`);
-            return;
-        }
-
-        // 確保本地麥克風與相機軌道已完全注入
-        if (localStream) {
-            localStream.getTracks().forEach(track => {
-                const senders = pc.getSenders();
-                const exists = senders.some(s => s.track && s.track.id === track.id);
-                if (!exists) {
-                    try { pc.addTrack(track, localStream); } catch (e) {}
-                }
-            });
-        }
-
-        try {
-            const offer = await pc.createOffer({
-                offerToReceiveAudio: true,
-                offerToReceiveVideo: true,
-                iceRestart: Boolean(isRestart)
-            });
-            await pc.setLocalDescription(offer);
-
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({
-                    type: 'signal',
-                    targetUid: targetUid,
-                    signal: {
-                        type: 'offer',
-                        sdp: pc.localDescription.sdp
-                    }
-                }));
-            }
-        } catch (err) {
-            console.warn('[Cobin] 發起 Offer 握手重試:', err);
-        }
-    }
-
-    // ==== 萬能容錯 SDP 與 ICE Candidate 解析器 ====
-    function parseSessionDescription(signal, expectedType) {
-        if (!signal) return null;
-        let sdpStr = '';
-        let typeStr = signal.type || expectedType;
-
-        if (typeof signal === 'string') {
-            sdpStr = signal;
-        } else if (typeof signal.sdp === 'string') {
-            sdpStr = signal.sdp;
-        } else if (signal.sdp && typeof signal.sdp.sdp === 'string') {
-            sdpStr = signal.sdp.sdp;
-            typeStr = signal.sdp.type || typeStr;
-        }
-
-        if (!sdpStr) return null;
-
-        return new RTCSessionDescription({
-            type: typeStr,
-            sdp: sdpStr
-        });
-    }
-
-    function parseIceCandidate(candData) {
-        if (!candData) return null;
-        try {
-            if (typeof candData === 'string') {
-                return new RTCIceCandidate({ candidate: candData });
-            }
-            const candidateStr = candData.candidate || (candData.candidate && candData.candidate.candidate) || '';
-            const sdpMid = candData.sdpMid !== undefined ? candData.sdpMid : (candData.candidate && candData.candidate.sdpMid);
-            const sdpMLineIndex = candData.sdpMLineIndex !== undefined ? candData.sdpMLineIndex : (candData.candidate && candData.candidate.sdpMLineIndex);
-
-            return new RTCIceCandidate({
-                candidate: candidateStr,
-                sdpMid: sdpMid,
-                sdpMLineIndex: sdpMLineIndex !== null && sdpMLineIndex !== undefined ? Number(sdpMLineIndex) : null
-            });
-        } catch (e) {
-            return null;
-        }
-    }
-
-    // ==== 處理信令 (含 ICE Candidate 隊列防止掉包 + Perfect Negotiation 防 Glare) ====
+    // ==== 處理信令 (完美協商 Perfect Negotiation) ====
     async function handleSignalMessage(fromUid, fromNickname, signal) {
         if (!signal) return;
 
         let peerObj = peers[fromUid];
-
-        // 如果連線不存在或已關閉，建立新的
         if (!peerObj || !peerObj.pc || peerObj.pc.connectionState === 'closed') {
-            if (peerObj) destroyPeer(fromUid);
-            await createPeerConnection(fromUid, fromNickname, false);
+            await createPeerConnection(fromUid, fromNickname);
             peerObj = peers[fromUid];
         }
 
         const pc = peerObj?.pc;
         if (!pc) return;
 
-        if (signal.type === 'offer') {
-            try {
-                // 確保在建立 Answer 之前，本地麥克風軌道已全數注入 pc，保證 Answer 為 sendrecv 雙向音訊
-                if (!localStream) {
-                    await initLocalMedia();
+        try {
+            if (signal.description) {
+                const description = signal.description;
+                
+                // 碰撞判定 (正在發 Offer 或者 狀態不是 stable)
+                const offerCollision = (description.type === 'offer') && (peerObj.makingOffer || pc.signalingState !== 'stable');
+                
+                // 決定誰是 Polite (依據 UID 字母順序，保證絕對公平一致)
+                const polite = myUid > fromUid;
+                
+                peerObj.ignoreOffer = !polite && offerCollision;
+                if (peerObj.ignoreOffer) {
+                    console.log(`[Cobin] 🛡️ 拒絕碰撞 Offer (${fromNickname || fromUid})`);
+                    return;
                 }
-                if (localStream) {
-                    localStream.getTracks().forEach(track => {
-                        const senders = pc.getSenders();
-                        const exists = senders.some(s => s.track && s.track.id === track.id);
-                        if (!exists) {
-                            try { pc.addTrack(track, localStream); } catch (e) {}
-                        }
-                    });
-                }
 
-                const rtcDesc = parseSessionDescription(signal, 'offer');
-                if (rtcDesc) {
-                    // ★ 完美協商 (Perfect Negotiation) 解決 Glare 碰撞
-                    const offerCollision = (pc.signalingState !== 'stable');
-                    const polite = myUid > fromUid; // 用 UID 大小決定誰是 Polite
-
-                    if (offerCollision) {
-                        if (!polite) {
-                            console.log(`[Cobin] ⚡ Offer 碰撞 (Glare)，我是 Impolite，忽略遠端 Offer (${fromNickname || fromUid})`);
-                            return; // 忽略對方的 Offer，對方會回滾並接受我的 Offer
-                        }
-                        console.log(`[Cobin] ⚡ Offer 碰撞 (Glare)，我是 Polite，回滾本地 Offer (${fromNickname || fromUid})`);
-                        await pc.setLocalDescription({ type: 'rollback' });
-                    }
-                    await pc.setRemoteDescription(rtcDesc);
-
-                    if (peerObj.pendingCandidates && peerObj.pendingCandidates.length > 0) {
-                        for (const rawCand of peerObj.pendingCandidates) {
-                            const cand = parseIceCandidate(rawCand);
-                            if (cand) {
-                                try { await pc.addIceCandidate(cand); } catch (e) {}
-                            }
-                        }
-                        peerObj.pendingCandidates = [];
-                    }
-
-                    const answer = await pc.createAnswer({
-                        offerToReceiveAudio: true,
-                        offerToReceiveVideo: true
-                    });
-                    await pc.setLocalDescription(answer);
-
+                await pc.setRemoteDescription(description);
+                if (description.type === 'offer') {
+                    await pc.setLocalDescription();
                     if (ws && ws.readyState === WebSocket.OPEN) {
                         ws.send(JSON.stringify({
                             type: 'signal',
                             targetUid: fromUid,
-                            signal: {
-                                type: 'answer',
-                                sdp: pc.localDescription.sdp
-                            }
+                            signal: { description: pc.localDescription }
                         }));
                     }
                 }
-            } catch (e) {
-                console.error('[Cobin] 處理 Offer 失敗:', e);
-            }
-        } else if (signal.type === 'answer') {
-            try {
-                // 只在我們確實發了 Offer 的狀態下才接受 Answer
-                if (pc.signalingState !== 'have-local-offer') {
-                    console.warn(`[Cobin] 忽略孤兒 Answer (signalingState=${pc.signalingState})`);
-                    return;
-                }
-                const rtcDesc = parseSessionDescription(signal, 'answer');
-                if (rtcDesc) {
-                    await pc.setRemoteDescription(rtcDesc);
-
-                    if (peerObj.pendingCandidates && peerObj.pendingCandidates.length > 0) {
-                        for (const rawCand of peerObj.pendingCandidates) {
-                            const cand = parseIceCandidate(rawCand);
-                            if (cand) {
-                                try { await pc.addIceCandidate(cand); } catch (e) {}
-                            }
-                        }
-                        peerObj.pendingCandidates = [];
-                    }
-                }
-            } catch (e) {
-                console.error('[Cobin] 處理 Answer 失敗:', e);
-            }
-        } else if (signal.type === 'candidate') {
-            const cand = parseIceCandidate(signal.candidate || signal);
-            if (cand) {
-                if (pc.remoteDescription && pc.remoteDescription.type) {
-                    try {
-                        await pc.addIceCandidate(cand);
-                    } catch (e) {}
-                } else {
-                    if (!peerObj.pendingCandidates) peerObj.pendingCandidates = [];
-                    peerObj.pendingCandidates.push(signal.candidate || signal);
+            } else if (signal.candidate) {
+                try {
+                    await pc.addIceCandidate(signal.candidate);
+                } catch (err) {
+                    if (!peerObj.ignoreOffer) console.warn('[Cobin] ICE 處理異常:', err);
                 }
             }
+        } catch (err) {
+            console.error('[Cobin] 處理信令失敗:', err);
         }
     }
 
@@ -1557,40 +1347,6 @@
                 `], { type: 'application/javascript' });
                 const workerUrl = URL.createObjectURL(blob);
                 keepAliveWorker = new Worker(workerUrl);
-                keepAliveWorker.onmessage = function() {
-                    if (currentRoomId) {
-                        if (audioContext && audioContext.state === 'suspended') {
-                            audioContext.resume().catch(() => {});
-                        }
-                        if (silentAudioKeeper && silentAudioKeeper.paused) {
-                            silentAudioKeeper.play().catch(() => {});
-                        }
-                    }
-                };
-                keepAliveWorker.postMessage('start');
-            }
-        } catch (e) {
-            console.warn('[Cobin] Web Worker 保活不可用:', e);
-        }
-
-        // 2. Web Audio API 底層音訊管道長效保活 (生成極致微弱 25Hz 音頻，維持系統音訊會話活躍)
-        try {
-            const ctx = audioContext || new (window.AudioContext || window.webkitAudioContext)();
-            if (ctx.state === 'suspended') {
-                ctx.resume().catch(() => {});
-            }
-            if (!bgOscillatorNode && ctx) {
-                bgOscillatorNode = ctx.createOscillator();
-                bgGainNode = ctx.createGain();
-                bgOscillatorNode.type = 'sine';
-                bgOscillatorNode.frequency.setValueAtTime(25, ctx.currentTime); // 25Hz 超低音
-                bgGainNode.gain.setValueAtTime(0.002, ctx.currentTime); // 極小音量
-                bgOscillatorNode.connect(bgGainNode);
-                bgGainNode.connect(ctx.destination);
-                bgOscillatorNode.start();
-            }
-        } catch (e) {}
-
         // 3. HTML5 Audio 標籤循環保活 (第二重保險)
         if (!silentAudioKeeper) {
             try {
@@ -1703,7 +1459,6 @@
 
     function cleanupCallState() {
         stopScreenShare();
-        stopBackgroundAudioKeeper();
 
         if (localStream) {
             localStream.getTracks().forEach(t => t.stop());
