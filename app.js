@@ -930,21 +930,22 @@
         }
     }
 
-    // ==== 控制列：1. 螢幕分享 ====
-    window.toggleScreenShare = async function() {
-        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    // 實時混音器變數 (用於將「螢幕系統聲音」與「自己說話麥克風」混合為雙軌發送)
+    let mixedAudioCtx = null;
+    let mixedAudioDestination = null;
+    let micSourceNode = null;
+    let screenAudioSourceNode = null;
 
+    // ==== 控制列：1. 螢幕分享 (支援高清視訊 + 系統/分頁聲音混音分享) ====
+    window.toggleScreenShare = async function() {
         if (!isScreenSharing) {
             try {
                 if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
-                    if (isMobile) {
-                        showToast('📱 手機瀏覽器因系統隱私限制不支援發起分享，請用電腦發起（手機支援全螢幕觀看）');
-                    } else {
-                        showToast('⚠️ 當前瀏覽器/設備不支援開啟螢幕分享');
-                    }
+                    showToast('⚠️ 您的瀏覽器或設備不支援螢幕分享');
                     return;
                 }
 
+                // 請求螢幕視訊 + 系統/分頁聲音 (瀏覽器彈窗可勾選分享音訊)
                 screenStream = await navigator.mediaDevices.getDisplayMedia({
                     video: {
                         cursor: 'always',
@@ -952,13 +953,47 @@
                         height: { ideal: 1080, max: 1080 },
                         frameRate: { ideal: 30, max: 30 }
                     },
-                    audio: false
+                    audio: {
+                        echoCancellation: false,
+                        noiseSuppression: false,
+                        autoGainControl: false,
+                        suppressLocalAudioPlayback: false
+                    }
                 });
 
                 const screenTrack = screenStream.getVideoTracks()[0];
                 if (!screenTrack) return;
 
-                // 替換所有 WebRTC 連線中的視訊軌道
+                // 檢查是否帶有螢幕音訊軌道 (例如分享 YouTube/遊戲/分頁聲音)
+                const screenAudioTrack = screenStream.getAudioTracks()[0];
+                let outgoingAudioTrack = localStream ? localStream.getAudioTracks()[0] : null;
+
+                if (screenAudioTrack && localStream && localStream.getAudioTracks().length > 0) {
+                    // 啟用即時混音器：麥克風 + 螢幕系統聲音
+                    try {
+                        mixedAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                        mixedAudioDestination = mixedAudioCtx.createMediaStreamDestination();
+
+                        const micTrack = localStream.getAudioTracks()[0];
+                        const micStream = new MediaStream([micTrack]);
+                        micSourceNode = mixedAudioCtx.createMediaStreamSource(micStream);
+                        micSourceNode.connect(mixedAudioDestination);
+
+                        const screenAudioOnlyStream = new MediaStream([screenAudioTrack]);
+                        screenAudioSourceNode = mixedAudioCtx.createMediaStreamSource(screenAudioOnlyStream);
+                        screenAudioSourceNode.connect(mixedAudioDestination);
+
+                        outgoingAudioTrack = mixedAudioDestination.stream.getAudioTracks()[0];
+                        console.log('[Cobin] 🎵 成功啟用「麥克風 + 螢幕聲音」實時混音輸出！');
+                    } catch (mixErr) {
+                        console.warn('[Cobin] 混音初始化失敗，使用螢幕音訊:', mixErr);
+                        outgoingAudioTrack = screenAudioTrack;
+                    }
+                } else if (screenAudioTrack) {
+                    outgoingAudioTrack = screenAudioTrack;
+                }
+
+                // 替換所有 WebRTC 連線中的視訊與音訊軌道
                 for (const uid in peers) {
                     const pc = peers[uid].pc;
                     if (!pc) continue;
@@ -968,22 +1003,13 @@
                         if (videoSender) {
                             await videoSender.replaceTrack(screenTrack);
                         } else {
-                            // 新增螢幕軌道並重新發起協商
                             pc.addTrack(screenTrack, screenStream);
-                            const offer = await pc.createOffer({
-                                offerToReceiveAudio: true,
-                                offerToReceiveVideo: true
-                            });
-                            await pc.setLocalDescription(offer);
-                            if (ws && ws.readyState === WebSocket.OPEN) {
-                                ws.send(JSON.stringify({
-                                    type: 'signal',
-                                    targetUid: uid,
-                                    signal: {
-                                        type: 'offer',
-                                        sdp: pc.localDescription.sdp
-                                    }
-                                }));
+                        }
+
+                        if (outgoingAudioTrack) {
+                            const audioSender = senders.find(s => s.track && s.track.kind === 'audio');
+                            if (audioSender) {
+                                await audioSender.replaceTrack(outgoingAudioTrack);
                             }
                         }
                     } catch (e) {
