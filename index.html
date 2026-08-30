@@ -912,10 +912,11 @@
                 top: 0;
                 bottom: 0;
                 left: 0;
-                width: 280px;
+                width: 82%;
+                max-width: 300px;
                 transform: translateX(-100%);
                 z-index: 100;
-                box-shadow: 20px 0 50px rgba(0, 0, 0, 0.85);
+                box-shadow: 20px 0 50px rgba(0, 0, 0, 0.9);
             }
 
             .left-sidebar.mobile-open {
@@ -926,8 +927,8 @@
                 display: none;
                 position: fixed;
                 inset: 0;
-                background: rgba(0, 0, 0, 0.65);
-                backdrop-filter: blur(4px);
+                background: rgba(0, 0, 0, 0.7);
+                backdrop-filter: blur(6px);
                 z-index: 90;
             }
 
@@ -939,23 +940,65 @@
                 display: flex;
             }
 
+            .stage-header {
+                height: 52px;
+                padding: 0 14px;
+            }
+
+            .stage-title-left {
+                font-size: 15px;
+                gap: 8px;
+            }
+
             .lobby-screen {
-                padding: 20px 16px;
+                padding: 16px 14px;
             }
 
             .lobby-hero-banner {
-                padding: 24px 20px;
+                padding: 20px 16px;
+                margin-bottom: 20px;
             }
 
-            .video-grid-container {
-                padding: 12px 12px 85px 12px;
-                gap: 10px;
+            .lobby-hero-text h2 {
+                font-size: 20px;
+            }
+
+            .lobby-grid-cards {
                 grid-template-columns: 1fr;
+                gap: 12px;
+            }
+
+            /* 手機通話舞台專屬佈局 */
+            .video-grid-container {
+                padding: 10px 10px 80px 10px;
+                gap: 10px;
+                display: flex !important;
+                flex-direction: column !important;
+                align-items: center !important;
+                justify-content: flex-start !important;
+            }
+
+            .video-grid-container .video-tile {
+                width: 100% !important;
+                height: auto !important;
+                aspect-ratio: 16 / 9 !important;
+                max-height: 40vh !important;
+                border-radius: 14px !important;
+            }
+
+            .video-grid-container .video-tile.is-screen {
+                width: 100% !important;
+                height: auto !important;
+                max-height: 60vh !important;
+                aspect-ratio: 16 / 9 !important;
+                border-color: #5865f2 !important;
+                order: -1 !important;
             }
 
             .floating-action-bar {
-                padding: 6px 12px;
-                gap: 8px;
+                bottom: max(14px, var(--safe-bottom));
+                padding: 6px 14px;
+                gap: 10px;
             }
 
             .call-btn {

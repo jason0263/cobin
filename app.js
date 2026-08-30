@@ -441,6 +441,27 @@
     window.addEventListener('click', unlockMobileAudio, { passive: true });
     window.addEventListener('touchstart', unlockMobileAudio, { passive: true });
 
+    // 建立 0 消耗空白視訊軌道 (確保 WebRTC 始終建立視訊通道，螢幕分享 replaceTrack 0 延遲瞬間推送到手機)
+    function createBlankVideoTrack() {
+        try {
+            const canvas = document.createElement('canvas');
+            canvas.width = 16;
+            canvas.height = 16;
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+                ctx.fillStyle = '#000000';
+                ctx.fillRect(0, 0, 16, 16);
+            }
+            const stream = canvas.captureStream ? canvas.captureStream(1) : null;
+            if (stream && stream.getVideoTracks().length > 0) {
+                const track = stream.getVideoTracks()[0];
+                track.enabled = false;
+                return track;
+            }
+        } catch (e) {}
+        return null;
+    }
+
     // ==== 初始化本地媒體 (預設純麥克風，保護隱私且秒進房間) ====
     async function initLocalMedia() {
         if (!localStream) {
@@ -467,6 +488,13 @@
 
         if (localStream) {
             localStream.getAudioTracks().forEach(t => t.enabled = isMicEnabled);
+            // 注入視訊通道佔位符，保證隨時無縫切換螢幕分享
+            if (localStream.getVideoTracks().length === 0) {
+                const blankTrack = createBlankVideoTrack();
+                if (blankTrack) {
+                    try { localStream.addTrack(blankTrack); } catch (e) {}
+                }
+            }
         }
 
         updateCameraUI();
