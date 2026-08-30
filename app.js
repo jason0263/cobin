@@ -217,7 +217,11 @@
                     break;
 
                 case 'left-room':
-                    cleanupCallState();
+                    // ★ 只在我們還沒有加入新房間時才清理 (修復「退出後快速重進」的競態條件)
+                    // 避免伺服器的延遲回應摧毀已經重新加入的新房間狀態
+                    if (!currentRoomId) {
+                        cleanupCallState();
+                    }
                     break;
             }
         };
@@ -607,22 +611,22 @@
         }
     }
 
-    // ==== 新使用者加入房間 (舊成員銷毀舊連線 → 重建全新連線 → 雙向主動握手) ====
+    // ==== 新使用者加入房間 (舊成員清理舊連線 → 建立新連線 → 等待新成員的 Offer) ====
     async function handleUserJoined(user) {
         if (user.uid === myUid) return;
         showToast(`👋 ${user.nickname} 加入了房間`);
-        playToneSound('join'); // 🔔 播放高音進房提示音
+        playToneSound('join');
 
         if (!localStream) {
             await initLocalMedia();
         }
 
-        // ★ 徹底銷毀與該用戶的舊連線 (避免殘留僵屍 PeerConnection 導致重進後無聲)
+        // 清理舊連線 (如果有的話)
         destroyPeer(user.uid);
 
-        // ★ 以 isInitiator=true 建立全新連線並主動發起 Offer
-        // 雙方同時 Offer 不會衝突 — WebRTC 規範的 "glare" 機制會自動協調為一個勝出
-        await createPeerConnection(user.uid, user.nickname, true);
+        // ★ isInitiator=false: 舊成員不發 Offer，等新加入的成員發起
+        // 只有一方發 Offer，徹底避免雙方同時發 Offer 的 Glare 死鎖
+        await createPeerConnection(user.uid, user.nickname, false);
     }
 
     // ==== 徹底銷毀單個 Peer 連線 (釋放所有資源，保證下次建立全新連線) ====
@@ -651,9 +655,18 @@
 
     // ==== 建立 WebRTC 連線 (Mesh P2P) ====
     async function createPeerConnection(targetUid, targetNickname, isInitiator) {
-        // ★ 如果已存在舊連線，先徹底銷毀 (解決重進房間後殘留僵屍連線導致無聲的根本問題)
+        // 如果已存在良好的連線，直接返回 (不破壞正在運行的連線)
         if (peers[targetUid] && peers[targetUid].pc) {
-            console.log(`[Cobin] ♻️ 銷毀舊連線並重建 (${targetNickname || targetUid})`);
+            const existingPc = peers[targetUid].pc;
+            if (existingPc.connectionState !== 'closed' && existingPc.connectionState !== 'failed') {
+                console.log(`[Cobin] ✅ 汁用現有良好連線 (${targetNickname || targetUid}), state=${existingPc.connectionState}`);
+                if (isInitiator) {
+                    initiateHandshake(targetUid);
+                }
+                return existingPc;
+            }
+            // 連線已關閉/失敗，銷毀重建
+            console.log(`[Cobin] ♻️ 銷毀已失效連線並重建 (${targetNickname || targetUid}), state=${existingPc.connectionState}`);
             destroyPeer(targetUid);
         }
 
@@ -913,23 +926,15 @@
         }
     }
 
-    // ==== 處理信令 (含 ICE Candidate 隊列防止掉包) ====
+    // ==== 處理信令 (含 ICE Candidate 隊列防止掉包 + Perfect Negotiation 防 Glare) ====
     async function handleSignalMessage(fromUid, fromNickname, signal) {
         if (!signal) return;
 
         let peerObj = peers[fromUid];
 
-        // ★ 收到 offer 時：如果已有舊連線，徹底銷毀再重建
-        // 這是解決「電腦退出再進入後手機聽不到聲音」的核心修復
-        if (signal.type === 'offer') {
-            if (peerObj && peerObj.pc) {
-                console.log(`[Cobin] ♻️ 收到新 Offer，銷毀舊連線重建 (${fromNickname || fromUid})`);
-                destroyPeer(fromUid);
-                peerObj = null;
-            }
-        }
-
-        if (!peerObj || !peerObj.pc) {
+        // 如果連線不存在或已關閉，建立新的
+        if (!peerObj || !peerObj.pc || peerObj.pc.connectionState === 'closed') {
+            if (peerObj) destroyPeer(fromUid);
             await createPeerConnection(fromUid, fromNickname, false);
             peerObj = peers[fromUid];
         }
@@ -955,6 +960,12 @@
 
                 const rtcDesc = parseSessionDescription(signal, 'offer');
                 if (rtcDesc) {
+                    // ★ Glare 防護：如果我們已經發了 Offer (have-local-offer)，
+                    // 收到對方的 Offer 時先回滾自己的，再接受對方的
+                    if (pc.signalingState === 'have-local-offer') {
+                        console.log(`[Cobin] ⚡ Offer 碰撞 (Glare)，回滾本地 Offer 接受遠端 (${fromNickname || fromUid})`);
+                        await pc.setLocalDescription({ type: 'rollback' });
+                    }
                     await pc.setRemoteDescription(rtcDesc);
 
                     if (peerObj.pendingCandidates && peerObj.pendingCandidates.length > 0) {
@@ -989,6 +1000,11 @@
             }
         } else if (signal.type === 'answer') {
             try {
+                // 只在我們確實發了 Offer 的狀態下才接受 Answer
+                if (pc.signalingState !== 'have-local-offer') {
+                    console.warn(`[Cobin] 忽略孤兒 Answer (signalingState=${pc.signalingState})`);
+                    return;
+                }
                 const rtcDesc = parseSessionDescription(signal, 'answer');
                 if (rtcDesc) {
                     await pc.setRemoteDescription(rtcDesc);
@@ -1523,21 +1539,6 @@
         }
     }
 
-    // ==== 控制列：5. 紅色掛斷 / 離開房間 ====
-    window.leaveRoom = async function() {
-        await leaveRoomInternal();
-        showToast('📞 已退出通話');
-    };
-
-    async function leaveRoomInternal() {
-        if (!currentRoomId) return;
-
-        if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: 'leave-room' }));
-        }
-
-        cleanupCallState();
-    }
 
     // ==== 📱 手機後台語音守護系統 PRO (特別針對 Samsung One UI / 各大 Android 深度睡眠強化) ====
     let silentAudioKeeper = null;
