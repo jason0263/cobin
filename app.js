@@ -1237,12 +1237,32 @@
         cleanupCallState();
     }
 
-    // ==== 📱 手機後台語音守護系統 (退回主畫面、切換 App、玩手遊時保持通話不中斷) ====
+    // ==== 📱 手機後台語音守護系統 PRO (退回主畫面、切換 App、玩手遊時 100% 保持語音不中斷) ====
     let silentAudioKeeper = null;
     let wakeLockSentinel = null;
+    let bgOscillatorNode = null;
+    let bgGainNode = null;
 
     function startBackgroundAudioKeeper() {
-        // 1. 建立循環靜音音訊元素 (向 iOS Safari & Android 聲明正在播放音訊，防止標籤頁被系統凍結)
+        // 1. Web Audio API 底層音訊管道長效保活 (生成極致微弱 25Hz 音頻，騙過 iOS/Android 系統讓音訊執行緒永久活躍)
+        try {
+            const ctx = audioContext || new (window.AudioContext || window.webkitAudioContext)();
+            if (ctx.state === 'suspended') {
+                ctx.resume().catch(() => {});
+            }
+            if (!bgOscillatorNode && ctx) {
+                bgOscillatorNode = ctx.createOscillator();
+                bgGainNode = ctx.createGain();
+                bgOscillatorNode.type = 'sine';
+                bgOscillatorNode.frequency.setValueAtTime(25, ctx.currentTime); // 25Hz 超低音
+                bgGainNode.gain.setValueAtTime(0.002, ctx.currentTime); // 極小音量
+                bgOscillatorNode.connect(bgGainNode);
+                bgGainNode.connect(ctx.destination);
+                bgOscillatorNode.start();
+            }
+        } catch (e) {}
+
+        // 2. HTML5 Audio 標籤循環保活 (第二重保險)
         if (!silentAudioKeeper) {
             try {
                 silentAudioKeeper = new Audio();
@@ -1253,7 +1273,7 @@
             } catch (e) {}
         }
 
-        // 2. 註冊系統通知列與鎖定畫面 MediaSession 通話控制
+        // 3. 註冊系統通知列與鎖定畫面 MediaSession 通話控制
         if ('mediaSession' in navigator) {
             try {
                 navigator.mediaSession.metadata = new MediaMetadata({
@@ -1274,7 +1294,7 @@
             } catch (e) {}
         }
 
-        // 3. 請求螢幕常亮 Wake Lock (防止自動休眠斷開)
+        // 4. 請求螢幕常亮 Wake Lock (防止自動休眠斷開)
         if ('wakeLock' in navigator && !wakeLockSentinel) {
             navigator.wakeLock.request('screen').then(lock => {
                 wakeLockSentinel = lock;
@@ -1283,6 +1303,15 @@
     }
 
     function stopBackgroundAudioKeeper() {
+        if (bgOscillatorNode) {
+            try {
+                bgOscillatorNode.stop();
+                bgOscillatorNode.disconnect();
+            } catch (e) {}
+            bgOscillatorNode = null;
+            bgGainNode = null;
+        }
+
         if (silentAudioKeeper) {
             try {
                 silentAudioKeeper.pause();
