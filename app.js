@@ -680,12 +680,22 @@
             pendingCandidates: []
         };
 
+        // 確保 PeerConnection 始終具備雙向音訊收發能力 (即使手機端無麥克風/暫未授權也能 100% 接收對端聲音)
+        try {
+            const hasAudioTransceiver = pc.getTransceivers && pc.getTransceivers().some(t => t.receiver?.track?.kind === 'audio' || t.sender?.track?.kind === 'audio');
+            if (!hasAudioTransceiver && pc.addTransceiver) {
+                pc.addTransceiver('audio', { direction: 'sendrecv' });
+            }
+        } catch (e) {}
+
         // 加入本地軌道 (麥克風音訊與鏡頭視訊)
         if (localStream) {
             localStream.getTracks().forEach(track => {
                 const senders = pc.getSenders();
-                const exists = senders.some(s => s.track && s.track.id === track.id);
-                if (!exists) {
+                const matchedSender = senders.find(s => s.track && s.track.kind === track.kind);
+                if (matchedSender) {
+                    try { matchedSender.replaceTrack(track); } catch (e) {}
+                } else {
                     try { pc.addTrack(track, localStream); } catch (e) {}
                 }
             });
