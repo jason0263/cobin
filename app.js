@@ -220,7 +220,9 @@
                     // ★ 只在我們還沒有加入新房間時才清理 (修復「退出後快速重進」的競態條件)
                     // 避免伺服器的延遲回應摧毀已經重新加入的新房間狀態
                     if (!currentRoomId) {
-                        cleanupCallState();
+                        for (const uid in peers) {
+                            destroyPeer(uid);
+                        }
                     }
                     break;
             }
@@ -633,7 +635,21 @@
     function destroyPeer(uid) {
         const peerObj = peers[uid];
         if (!peerObj) return;
-        try { if (peerObj.pc) peerObj.pc.close(); } catch (e) {}
+        
+        // ★ 核心修復：在關閉 PC 前，明確停止所有遠端軌道
+        // 否則手機瀏覽器（特別是 iOS Safari）的硬體解碼器會被鎖死，導致下次重進時沒有聲音或黑屏
+        try {
+            if (peerObj.pc) {
+                peerObj.pc.getReceivers().forEach(receiver => {
+                    if (receiver.track) receiver.track.stop();
+                });
+                peerObj.pc.getSenders().forEach(sender => {
+                    if (sender.track) sender.track.stop();
+                });
+                peerObj.pc.close();
+            }
+        } catch (e) {}
+        
         try { if (peerObj.videoTile) peerObj.videoTile.remove(); } catch (e) {}
         const audioEl = document.getElementById(`audio-${uid}`);
         if (audioEl) {
