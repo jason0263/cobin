@@ -72,18 +72,24 @@
         console.log('[Cobin] Audio Pool 初始化完成 (容量: 20)');
     }
 
-    // ICE 配置 (多國家高穿透 STUN 伺服器池，支援 4G/5G 移動網路與跨運營商 NAT 穿透)
+    // ICE 配置 (多國家高穿透 STUN 伺服器池 + 免費公開 TURN 中繼伺服器)
     const rtcConfig = {
         iceServers: [
+            // 基礎 STUN 伺服器 (負責普通網路探路)
             { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun1.l.google.com:19302' },
-            { urls: 'stun:stun2.l.google.com:19302' },
-            { urls: 'stun:stun3.l.google.com:19302' },
-            { urls: 'stun:stun4.l.google.com:19302' },
-            { urls: 'stun:global.stun.twilio.com:3478' },
             { urls: 'stun:stun.cloudflare.com:3478' },
             { urls: 'stun:stun.nextcloud.com:443' },
-            { urls: 'stun:stun.services.mozilla.com:3478' }
+            
+            // 🚀 免費公開 TURN 伺服器 (OpenRelayProject 提供，無需註冊，專解防火牆與 5G 封鎖)
+            {
+                urls: [
+                    'turn:openrelay.metered.ca:80',
+                    'turn:openrelay.metered.ca:443',
+                    'turn:openrelay.metered.ca:443?transport=tcp'
+                ],
+                username: 'openrelayproject',
+                credential: 'openrelayproject'
+            }
         ],
         iceCandidatePoolSize: 10
     };
