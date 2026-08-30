@@ -623,9 +623,6 @@
                 peerObj.pc.getReceivers().forEach(receiver => {
                     if (receiver.track) receiver.track.stop();
                 });
-                peerObj.pc.getSenders().forEach(sender => {
-                    if (sender.track) sender.track.stop();
-                });
                 peerObj.pc.close();
             }
         } catch (e) {}
