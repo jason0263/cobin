@@ -1646,6 +1646,23 @@
         }
     });
 
+    // ==== 核心：主動離開房間 / 掛斷通話 ====
+    window.leaveRoom = async function() {
+        console.log('[Cobin] 點擊掛斷離開房間');
+        await leaveRoomInternal();
+        showToast('🚪 已離開語音房間');
+    };
+
+    async function leaveRoomInternal() {
+        if (ws && ws.readyState === WebSocket.OPEN && currentRoomId) {
+            ws.send(JSON.stringify({
+                type: 'leave-room',
+                roomId: currentRoomId
+            }));
+        }
+        cleanupCallState();
+    }
+
     function cleanupCallState() {
         stopScreenShare();
         stopBackgroundAudioKeeper();
