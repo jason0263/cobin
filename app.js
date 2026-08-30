@@ -587,17 +587,19 @@
         const tile = ensureUserVideoTile(targetUid, targetNickname);
         const videoEl = tile.querySelector('video');
 
-        let audioEl = document.getElementById(`audio-${targetUid}`);
-        if (!audioEl) {
-            audioEl = document.createElement('audio');
-            audioEl.id = `audio-${targetUid}`;
-            audioEl.autoplay = true;
-            audioEl.playsInline = true;
-            audioEl.setAttribute('playsinline', '');
-            audioEl.setAttribute('webkit-playsinline', '');
-            audioEl.style.display = 'none';
-            document.body.appendChild(audioEl);
+        // 建立獨立純淨的 <audio> 播放器 (每次重進徹底新建，杜絕殘留死鎖)
+        let oldAudioEl = document.getElementById(`audio-${targetUid}`);
+        if (oldAudioEl) {
+            try { oldAudioEl.pause(); oldAudioEl.srcObject = null; oldAudioEl.remove(); } catch (e) {}
         }
+        const audioEl = document.createElement('audio');
+        audioEl.id = `audio-${targetUid}`;
+        audioEl.autoplay = true;
+        audioEl.playsInline = true;
+        audioEl.setAttribute('playsinline', '');
+        audioEl.setAttribute('webkit-playsinline', '');
+        audioEl.style.display = 'none';
+        document.body.appendChild(audioEl);
 
         peers[targetUid] = {
             pc: pc,
@@ -626,7 +628,6 @@
             if (!peerObj) return;
 
             if (event.track.kind === 'video') {
-                // 1. 純視訊軌道綁定至 <video> 標籤 (純畫面，100% 繞過手機音訊封鎖與黑屏)
                 const videoStream = new MediaStream([event.track]);
                 if (peerObj.videoEl) {
                     peerObj.videoEl.muted = true;
@@ -652,15 +653,22 @@
                 spotlightUid = targetUid;
                 updateStageLayout();
             } else if (event.track.kind === 'audio') {
-                // 2. 純音訊軌道綁定至獨立 <audio> 標籤 (100% 確保揚聲器與耳機響亮清晰)
                 const audioStream = new MediaStream([event.track]);
                 if (peerObj.audioEl) {
                     peerObj.audioEl.muted = false;
                     peerObj.audioEl.volume = 1.0;
                     peerObj.audioEl.srcObject = audioStream;
-                    peerObj.audioEl.play().catch(err => {
-                        console.warn('[Cobin] 音訊播放等待點擊解鎖:', err);
-                    });
+                    
+                    const triggerPlay = () => {
+                        if (peerObj.audioEl) {
+                            peerObj.audioEl.play().catch(() => {});
+                        }
+                        if (audioContext && audioContext.state === 'suspended') {
+                            audioContext.resume().catch(() => {});
+                        }
+                    };
+                    triggerPlay();
+                    event.track.onunmute = triggerPlay;
                 }
                 setupRemoteAudioAnalysis(audioStream, targetUid);
             }
@@ -1571,6 +1579,15 @@
             if (peers[uid].videoTile) peers[uid].videoTile.remove();
             delete peers[uid];
         }
+
+        // 徹底清除所有殘留的遠端音訊播放器
+        document.querySelectorAll('audio[id^="audio-"]').forEach(a => {
+            try {
+                a.pause();
+                a.srcObject = null;
+                a.remove();
+            } catch (e) {}
+        });
 
         if (callTimerInterval) {
             clearInterval(callTimerInterval);
