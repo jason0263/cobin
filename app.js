@@ -678,7 +678,10 @@
         // 加入本地軌道
         if (localStream) {
             localStream.getTracks().forEach(track => {
-                try { pc.addTrack(track, localStream); } catch (e) {}
+                try { 
+                    const clonedTrack = track.clone();
+                    pc.addTrack(clonedTrack, localStream); 
+                } catch (e) {}
             });
         }
 
