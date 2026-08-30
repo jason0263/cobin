@@ -471,6 +471,12 @@
         const tile = ensureUserVideoTile(targetUid, targetNickname);
         const videoEl = tile.querySelector('video');
 
+        // 預先註冊 video 與 audio 的 sendrecv 收發器 (保證 WebRTC 始終具備視訊通道，螢幕分享 0 秒即時推送)
+        try {
+            pc.addTransceiver('audio', { direction: 'sendrecv' });
+            pc.addTransceiver('video', { direction: 'sendrecv' });
+        } catch (e) {}
+
         // 建立獨立隱藏的 <audio> 播放器 (雙保險保證手機揚聲器 100% 播放)
         let audioEl = document.getElementById(`audio-${targetUid}`);
         if (!audioEl) {
@@ -495,12 +501,16 @@
             pendingCandidates: []
         };
 
-        // 加入本地軌道
+        // 加入本地軌道 (若已存在對應發送器則使用 replaceTrack)
         if (localStream) {
             localStream.getTracks().forEach(track => {
-                try {
-                    pc.addTrack(track, localStream);
-                } catch (e) {}
+                const senders = pc.getSenders();
+                const sender = senders.find(s => s.track && s.track.kind === track.kind);
+                if (sender) {
+                    sender.replaceTrack(track);
+                } else {
+                    try { pc.addTrack(track, localStream); } catch (e) {}
+                }
             });
         }
 
@@ -999,11 +1009,26 @@
                     if (!pc) continue;
                     try {
                         const senders = pc.getSenders();
-                        const videoSender = senders.find(s => s.track && s.track.kind === 'video');
+                        const videoSender = senders.find(s => s.track && s.track.kind === 'video') || senders.find(s => !s.track);
                         if (videoSender) {
                             await videoSender.replaceTrack(screenTrack);
                         } else {
                             pc.addTrack(screenTrack, screenStream);
+                            const offer = await pc.createOffer({
+                                offerToReceiveAudio: true,
+                                offerToReceiveVideo: true
+                            });
+                            await pc.setLocalDescription(offer);
+                            if (ws && ws.readyState === WebSocket.OPEN) {
+                                ws.send(JSON.stringify({
+                                    type: 'signal',
+                                    targetUid: uid,
+                                    signal: {
+                                        type: 'offer',
+                                        sdp: pc.localDescription.sdp
+                                    }
+                                }));
+                            }
                         }
 
                         if (outgoingAudioTrack) {
