@@ -698,6 +698,19 @@
                     triggerPlay();
                     event.track.onunmute = triggerPlay;
                 }
+
+                // 雙保險直通硬體聲道 (繞過手機瀏覽器 <audio> 標籤靜音限制)
+                try {
+                    const ctx = audioContext || new (window.AudioContext || window.webkitAudioContext)();
+                    if (ctx.state === 'suspended') {
+                        ctx.resume().catch(() => {});
+                    }
+                    const remoteSource = ctx.createMediaStreamSource(audioStream);
+                    remoteSource.connect(ctx.destination);
+                } catch (audioRouteErr) {
+                    console.warn('[Cobin] Web Audio 直通備援提示:', audioRouteErr);
+                }
+
                 setupRemoteAudioAnalysis(audioStream, targetUid);
             }
         };

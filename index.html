@@ -982,15 +982,22 @@
                 gap: 12px;
             }
 
+            /* 徹底解決手機端 display:none 被覆蓋導致與大廳重疊的 Bug */
+            .video-grid-container[style*="none"],
+            .lobby-screen[style*="none"],
+            .stage-header[style*="none"] {
+                display: none !important;
+            }
+
             /* 手機通話舞台專屬佈局 (100% 滿版無黑邊，自適應上下等分) */
             .video-grid-container {
-                padding: 10px 10px 88px 10px !important;
-                gap: 10px !important;
-                display: flex !important;
-                flex-direction: column !important;
-                align-items: stretch !important;
-                justify-content: flex-start !important;
-                overflow-y: auto !important;
+                padding: 10px 10px 88px 10px;
+                gap: 10px;
+                display: flex;
+                flex-direction: column;
+                align-items: stretch;
+                justify-content: flex-start;
+                overflow-y: auto;
             }
 
             .video-grid-container .video-tile {
@@ -1301,6 +1308,6 @@
             }
         }
     </script>
-    <script src="app.js?v=20260830_mobile_perfection"></script>
+    <script src="app.js?v=20260830_final_sound_fix"></script>
 </body>
 </html>
