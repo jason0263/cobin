@@ -9,7 +9,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="theme-color" content="#090b10" />
+    <meta name="theme-color" content="#07090e" />
     <link rel="manifest" href="manifest.json" />
 
     <title>Cobin Voice & Video - 頂級即時語音與視訊通話</title>
@@ -21,17 +21,17 @@
 
     <style>
         :root {
-            /* 🌌 極致黑曜石暗夜調 (Obsidian Dark Theme) */
+            /* 🌌 極致黑曜石暗夜調 */
             --bg-body: #07090e;
             --bg-sidebar: #0e121b;
-            --bg-card: #141926;
-            --bg-tile: #0b0f17;
+            --bg-panel: #0b0f17;
+            --bg-card: rgba(20, 26, 40, 0.7);
+            --bg-card-hover: rgba(28, 36, 56, 0.85);
             
             /* 毛玻璃與發光邊框 */
-            --glass-card: rgba(20, 26, 38, 0.75);
             --glass-border: rgba(255, 255, 255, 0.08);
             --glass-border-hover: rgba(255, 255, 255, 0.2);
-            --glass-pill: rgba(14, 18, 28, 0.88);
+            --glass-pill: rgba(14, 18, 28, 0.92);
             
             /* 品牌與強調色系 */
             --brand-primary: #5865f2;
@@ -51,10 +51,6 @@
             --radius-md: 14px;
             --radius-lg: 20px;
             --radius-pill: 9999px;
-            
-            /* 陰影 */
-            --shadow-tile: 0 10px 30px rgba(0, 0, 0, 0.5);
-            --shadow-float: 0 20px 50px rgba(0, 0, 0, 0.75);
             
             --font-display: 'Outfit', sans-serif;
             --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
@@ -77,23 +73,24 @@
             height: -webkit-fill-available;
             overflow: hidden;
             display: flex;
+            width: 100vw;
         }
 
-        /* 🌌 背景極光暗光 (Ambient Light) */
+        /* 🌌 背景極光暗光 */
         body::before {
             content: '';
             position: absolute;
-            top: -15%;
-            left: 25%;
-            width: 500px;
-            height: 500px;
+            top: -20%;
+            left: 30%;
+            width: 600px;
+            height: 600px;
             background: radial-gradient(circle, rgba(99, 102, 241, 0.08) 0%, transparent 70%);
             pointer-events: none;
             z-index: 0;
         }
 
-        /* 📋 現代一體化側邊欄 (Sidebar) */
-        .sidebar {
+        /* 📋 1. 左側頻道欄 (Left Sidebar) */
+        .left-sidebar {
             width: 280px;
             background: var(--bg-sidebar);
             display: flex;
@@ -155,7 +152,6 @@
             50% { opacity: 0.6; transform: scale(1.2); }
         }
 
-        /* 頻道清單 */
         .channels-wrapper {
             flex: 1;
             padding: 18px 12px;
@@ -235,7 +231,6 @@
             color: #fff;
         }
 
-        /* 房間在線成員子名單 */
         .room-members-list {
             margin-top: 8px;
             padding-top: 6px;
@@ -267,7 +262,6 @@
             background: var(--speaking-green);
         }
 
-        /* 底部個人資料卡片 */
         .user-status-card {
             height: 68px;
             padding: 0 16px;
@@ -307,19 +301,18 @@
             box-shadow: 0 2px 10px rgba(99, 102, 241, 0.35);
         }
 
-        /* 🎭 主通話舞台 (Main Stage) */
+        /* 🎭 2. 中央通話舞台 (Center Stage) */
         .main-stage {
             flex: 1;
             display: flex;
             flex-direction: column;
             height: 100%;
             position: relative;
-            background: radial-gradient(ellipse at center bottom, #101524 0%, #07090e 80%);
+            background: radial-gradient(ellipse at center bottom, #111626 0%, #07090e 80%);
             overflow: hidden;
             z-index: 10;
         }
 
-        /* 頂部通話標題列 */
         .stage-header {
             height: 60px;
             padding: 0 24px;
@@ -366,92 +359,201 @@
             cursor: pointer;
         }
 
-        /* 🏠 大廳歡迎頁面 (Lobby Screen) */
+        /* 🏠 滿版大廳歡迎儀表板 (Full-Width Fluid Lobby) */
         .lobby-screen {
             flex: 1;
             display: flex;
             flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            padding: 24px;
-            text-align: center;
+            padding: 36px 40px;
+            overflow-y: auto;
             z-index: 10;
         }
 
-        .lobby-hero-icon {
-            width: 76px;
-            height: 76px;
-            border-radius: 24px;
-            background: var(--brand-gradient);
+        .lobby-hero-banner {
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.18) 0%, rgba(139, 92, 246, 0.1) 50%, rgba(20, 26, 40, 0.6) 100%);
+            border: 1px solid rgba(99, 102, 241, 0.3);
+            border-radius: var(--radius-lg);
+            padding: 32px 36px;
             display: flex;
             align-items: center;
-            justify-content: center;
-            margin-bottom: 20px;
-            box-shadow: 0 12px 36px rgba(99, 102, 241, 0.4);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            animation: floatSlow 4s ease-in-out infinite;
+            justify-content: space-between;
+            margin-bottom: 28px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+            position: relative;
+            overflow: hidden;
         }
 
-        @keyframes floatSlow {
-            0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-6px); }
+        .lobby-hero-banner::after {
+            content: '🎙️';
+            position: absolute;
+            right: 20px;
+            bottom: -20px;
+            font-size: 120px;
+            opacity: 0.08;
+            pointer-events: none;
         }
 
-        .lobby-title {
+        .lobby-hero-text h2 {
             font-family: var(--font-display);
             font-size: 28px;
             font-weight: 800;
-            letter-spacing: -0.4px;
-            margin-bottom: 10px;
-            background: linear-gradient(135deg, #ffffff 40%, #94a3b8 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
+            margin-bottom: 8px;
+            letter-spacing: -0.3px;
         }
 
-        .lobby-subtitle {
+        .lobby-hero-text p {
             font-size: 14px;
-            color: var(--text-muted);
-            max-width: 440px;
+            color: var(--text-body);
+            max-width: 540px;
             line-height: 1.6;
-            margin-bottom: 30px;
         }
 
-        .lobby-grid-cards {
+        .lobby-section-title {
+            font-family: var(--font-display);
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--text-title);
+            margin-bottom: 16px;
             display: flex;
-            gap: 14px;
-            flex-wrap: wrap;
-            justify-content: center;
-            max-width: 760px;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* 大廳 3 欄滿版自適應卡片網格 */
+        .lobby-grid-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 16px;
+            width: 100%;
         }
 
         .lobby-room-item {
             background: var(--bg-card);
             border: 1px solid var(--glass-border);
-            padding: 18px 24px;
+            padding: 22px;
             border-radius: var(--radius-lg);
             display: flex;
-            align-items: center;
-            gap: 14px;
+            flex-direction: column;
+            gap: 16px;
             cursor: pointer;
             transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
-            min-width: 200px;
-            text-align: left;
+            position: relative;
         }
 
         .lobby-room-item:hover {
             transform: translateY(-4px);
-            border-color: rgba(99, 102, 241, 0.5);
-            background: rgba(30, 38, 58, 0.85);
+            border-color: rgba(99, 102, 241, 0.6);
+            background: var(--bg-card-hover);
             box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
         }
 
-        /* 📺 視訊網格容器 (Video Grid Container) */
+        .lobby-card-top {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .lobby-card-icon {
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.06);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            border: 1px solid var(--glass-border);
+        }
+
+        .lobby-card-btn {
+            margin-top: auto;
+            padding: 10px 14px;
+            border-radius: var(--radius-sm);
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid var(--glass-border);
+            color: #fff;
+            font-weight: 600;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            transition: all 0.2s ease;
+        }
+
+        .lobby-room-item:hover .lobby-card-btn {
+            background: var(--brand-gradient);
+            border-color: transparent;
+            box-shadow: 0 4px 14px rgba(99, 102, 241, 0.4);
+        }
+
+        /* 👥 3. 右側活躍成員面板 (Right Sidebar) */
+        .right-sidebar {
+            width: 240px;
+            background: var(--bg-panel);
+            border-left: 1px solid var(--glass-border);
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+            z-index: 20;
+        }
+
+        .right-sidebar-header {
+            height: 60px;
+            padding: 0 18px;
+            display: flex;
+            align-items: center;
+            border-bottom: 1px solid var(--glass-border);
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--text-title);
+            gap: 8px;
+        }
+
+        .right-members-container {
+            flex: 1;
+            padding: 16px 12px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .panel-member-card {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 10px;
+            border-radius: var(--radius-sm);
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid transparent;
+            transition: background 0.2s ease;
+        }
+
+        .panel-member-card:hover {
+            background: rgba(255, 255, 255, 0.05);
+            border-color: var(--glass-border);
+        }
+
+        .panel-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: var(--brand-gradient);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 13px;
+            font-weight: 700;
+            color: #fff;
+        }
+
+        /* 📺 視訊網格佈局 (Video Grid) */
         .video-grid-container {
             flex: 1;
             padding: 20px 24px 100px 24px;
             display: grid;
             gap: 16px;
-            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
             align-content: center;
             justify-content: center;
             overflow-y: auto;
@@ -468,7 +570,7 @@
 
         .video-grid-container.single-user .video-tile {
             width: 100%;
-            max-width: 780px;
+            max-width: 860px;
             aspect-ratio: 16 / 9;
         }
 
@@ -500,11 +602,11 @@
         /* 🎴 視訊卡片 (Video Tile) */
         .video-tile {
             position: relative;
-            background: var(--bg-tile);
+            background: #0b0f17;
             border-radius: var(--radius-lg);
             overflow: hidden;
             aspect-ratio: 16 / 9;
-            box-shadow: var(--shadow-tile);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
             border: 2px solid rgba(255, 255, 255, 0.08);
             display: flex;
             align-items: center;
@@ -527,7 +629,6 @@
             background: #000;
         }
 
-        /* 🟢 說話動態綠色呼吸外框 (Speaking Indicator) */
         .video-tile.speaking {
             border-color: var(--speaking-green) !important;
             box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.8), 0 10px 30px var(--speaking-glow) !important;
@@ -544,7 +645,6 @@
             transform: scaleX(-1);
         }
 
-        /* 視訊頂部懸浮工具列 */
         .tile-actions-bar {
             position: absolute;
             top: 12px;
@@ -591,7 +691,6 @@
             fill: currentColor;
         }
 
-        /* 🎬 劇院全螢幕模式 */
         .video-tile.cinema-fullscreen {
             position: fixed !important;
             top: 0 !important;
@@ -629,7 +728,6 @@
             display: none !important;
         }
 
-        /* 👤 頭像卡片圖層 (Avatar Placeholder) */
         .video-tile .avatar-placeholder {
             position: absolute;
             inset: 0;
@@ -663,7 +761,6 @@
             color: var(--text-title);
         }
 
-        /* 底部狀態膠囊 (Video Tag) */
         .video-tag {
             position: absolute;
             bottom: 10px;
@@ -700,7 +797,7 @@
             font-weight: 700;
         }
 
-        /* 💊 底部浮動通話按鈕條 (Floating Action Pill Bar) */
+        /* 💊 底部浮動通話按鈕條 */
         .floating-action-bar {
             position: absolute;
             bottom: max(20px, var(--safe-bottom));
@@ -714,7 +811,7 @@
             padding: 8px 16px;
             border-radius: var(--radius-pill);
             border: 1px solid rgba(255, 255, 255, 0.12);
-            box-shadow: var(--shadow-float);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.75);
             z-index: 50;
             transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
         }
@@ -778,7 +875,6 @@
             box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
         }
 
-        /* 💬 Toast 訊息 */
         .toast-msg {
             position: fixed;
             top: 20px;
@@ -803,9 +899,15 @@
             opacity: 1;
         }
 
-        /* 📱 手機 RWD 適配 */
+        /* 📱 手機與平板 RWD 適配 */
+        @media (max-width: 1024px) {
+            .right-sidebar {
+                display: none;
+            }
+        }
+
         @media (max-width: 768px) {
-            .sidebar {
+            .left-sidebar {
                 position: fixed;
                 top: 0;
                 bottom: 0;
@@ -816,7 +918,7 @@
                 box-shadow: 20px 0 50px rgba(0, 0, 0, 0.85);
             }
 
-            .sidebar.mobile-open {
+            .left-sidebar.mobile-open {
                 transform: translateX(0);
             }
 
@@ -835,6 +937,14 @@
 
             .mobile-toggle-btn {
                 display: flex;
+            }
+
+            .lobby-screen {
+                padding: 20px 16px;
+            }
+
+            .lobby-hero-banner {
+                padding: 24px 20px;
             }
 
             .video-grid-container {
@@ -865,8 +975,8 @@
     <!-- 手機側邊欄遮罩 -->
     <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="toggleMobileSidebar()"></div>
 
-    <!-- 側邊欄 (Sidebar) -->
-    <aside class="sidebar" id="sidebar">
+    <!-- 1. 左側頻道欄 (Left Sidebar) -->
+    <aside class="left-sidebar" id="sidebar">
         <div class="sidebar-brand">
             <div class="brand-logo-box">
                 <div class="brand-icon">
@@ -929,7 +1039,7 @@
         </div>
     </aside>
 
-    <!-- 主通話舞台 (Main Stage) -->
+    <!-- 2. 中央通話舞台 (Center Stage) -->
     <main class="main-stage">
         <!-- 頂部通話標題列 -->
         <header class="stage-header" id="stageHeader" style="display:none;">
@@ -946,35 +1056,59 @@
             <div id="roomParticipantsCount" style="font-size:13px; font-weight:600; color:var(--text-muted);">1 人在線</div>
         </header>
 
-        <!-- 大廳畫面 (Lobby Screen) -->
+        <!-- 大廳滿版流體儀表板 (Lobby Screen) -->
         <section class="lobby-screen" id="lobbyScreen">
-            <div class="lobby-hero-icon">
-                <svg width="38" height="38" viewBox="0 0 24 24" fill="white">
-                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9v-2h2v2zm0-4H9V7h2v5zm4 4h-2v-2h2v2zm0-4h-2V7h2v5z"/>
-                </svg>
+            <div class="lobby-hero-banner">
+                <div class="lobby-hero-text">
+                    <h2>歡迎加入 Cobin 即時語音社群</h2>
+                    <p>超低延遲 WebRTC 語音、高畫質視訊、螢幕聲音混音分享與手機後台長效通話。點擊下方房間即可立即開麥！</p>
+                </div>
             </div>
-            <h2 class="lobby-title">開始即時通話</h2>
-            <p class="lobby-subtitle">點擊下方任一房間立即加入，支援高畫質語音、螢幕聲音分享與手機後台通話！</p>
+
+            <div class="lobby-section-title">
+                <span>⚡ 快速加入語音房間</span>
+            </div>
+
             <div class="lobby-grid-cards">
                 <div class="lobby-room-item" onclick="handleRoomClick('room-1')">
-                    <span style="font-size:24px;">🔊</span>
-                    <div>
-                        <div style="font-weight:700; font-size:15px;">語音大廳 1</div>
-                        <div style="font-size:12px; color:var(--text-muted);">休閒聊天</div>
+                    <div class="lobby-card-top">
+                        <div class="lobby-card-icon">🔊</div>
+                        <div>
+                            <div style="font-weight:700; font-size:16px;">語音大廳 1</div>
+                            <div style="font-size:12px; color:var(--text-muted);">休閒暢聊 · 自由開麥</div>
+                        </div>
+                    </div>
+                    <div class="lobby-card-btn">
+                        <span>立即加入房間</span>
+                        <span>➔</span>
                     </div>
                 </div>
+
                 <div class="lobby-room-item" onclick="handleRoomClick('room-2')">
-                    <span style="font-size:24px;">🎮</span>
-                    <div>
-                        <div style="font-weight:700; font-size:15px;">遊戲開黑 2</div>
-                        <div style="font-size:12px; color:var(--text-muted);">組隊開麥</div>
+                    <div class="lobby-card-top">
+                        <div class="lobby-card-icon">🎮</div>
+                        <div>
+                            <div style="font-weight:700; font-size:16px;">遊戲開黑 2</div>
+                            <div style="font-size:12px; color:var(--text-muted);">組隊開黑 · 螢幕聲音分享</div>
+                        </div>
+                    </div>
+                    <div class="lobby-card-btn">
+                        <span>立即加入房間</span>
+                        <span>➔</span>
                     </div>
                 </div>
+
                 <div class="lobby-room-item" onclick="handleRoomClick('room-3')">
-                    <span style="font-size:24px;">💼</span>
-                    <div>
-                        <div style="font-weight:700; font-size:15px;">私人會議 3</div>
-                        <div style="font-size:12px; color:var(--text-muted);">工作討論</div>
+                    <div class="lobby-card-top">
+                        <div class="lobby-card-icon">💼</div>
+                        <div>
+                            <div style="font-weight:700; font-size:16px;">私人會議 3</div>
+                            <div style="font-size:12px; color:var(--text-muted);">工作討論 · 劇院全螢幕</div>
+                        </div>
+                    </div>
+                    <div class="lobby-card-btn">
+                        <span>立即加入房間</span>
+                        <span>➔</span>
                     </div>
                 </div>
             </div>
@@ -1053,9 +1187,22 @@
         </div>
     </main>
 
+    <!-- 👥 3. 右側活躍成員面板 (Right Sidebar) -->
+    <aside class="right-sidebar">
+        <div class="right-sidebar-header">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="var(--text-muted)"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+            <span>在線成員清單</span>
+        </div>
+        <div class="right-members-container" id="rightMembersContainer">
+            <div style="font-size:12px; color:var(--text-muted); padding:10px; text-align:center;">
+                正在同步頻道在線狀態...
+            </div>
+        </div>
+    </aside>
+
     <!-- 暱稱修改彈窗 -->
     <div class="nickname-modal-backdrop" id="nicknameModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.75); backdrop-filter:blur(8px); z-index:99999; align-items:center; justify-content:center;">
-        <div style="background:var(--bg-card); border:1px solid var(--glass-border-hover); border-radius:var(--radius-lg); padding:26px; width:90%; max-width:360px; box-shadow:var(--shadow-float);">
+        <div style="background:var(--bg-card); border:1px solid var(--glass-border-hover); border-radius:var(--radius-lg); padding:26px; width:90%; max-width:360px; box-shadow:0 20px 50px rgba(0,0,0,0.8);">
             <h3 style="font-family:var(--font-display); font-size:18px; margin-bottom:14px;">修改個人暱稱</h3>
             <input type="text" id="nicknameInput" maxlength="16" placeholder="請輸入暱稱..." style="width:100%; padding:12px 14px; border-radius:var(--radius-sm); border:1px solid var(--glass-border); background:rgba(0,0,0,0.4); color:#fff; font-size:14px; margin-bottom:18px; outline:none;" />
             <div style="display:flex; justify-content:flex-end; gap:8px;">
@@ -1094,6 +1241,6 @@
             }
         }
     </script>
-    <script src="app.js?v=20260830_mic_clean"></script>
+    <script src="app.js?v=20260830_full_layout"></script>
 </body>
 </html>

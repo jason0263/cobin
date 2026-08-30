@@ -238,12 +238,52 @@
                 usersSublist.innerHTML = '';
                 roomData.users.forEach(u => {
                     const tag = document.createElement('div');
-                    tag.className = 'room-user-tag';
+                    tag.className = 'member-tag';
                     tag.innerHTML = `
-                        <span class="user-dot"></span>
+                        <span class="dot"></span>
                         <span>${escapeHtml(u.nickname)} ${u.uid === myUid ? '(我)' : ''}</span>
                     `;
                     usersSublist.appendChild(tag);
+                });
+            }
+        }
+
+        // 同步渲染右側活躍成員面板
+        const rightContainer = document.getElementById('rightMembersContainer');
+        if (rightContainer) {
+            let allOnlineUsers = [];
+            for (const roomId in rooms) {
+                const rName = roomNameMap[roomId] || roomId;
+                rooms[roomId].users.forEach(u => {
+                    allOnlineUsers.push({ ...u, roomName: rName, roomId: roomId });
+                });
+            }
+
+            if (allOnlineUsers.length === 0) {
+                rightContainer.innerHTML = `
+                    <div style="font-size:12px; color:var(--text-muted); padding:16px 8px; text-align:center; line-height:1.6;">
+                        <div>💬 尚無其他成員在線</div>
+                        <div style="margin-top:8px; font-size:11px; color:var(--brand-primary); cursor:pointer;" onclick="copyInviteLink()">+ 複製連結邀請朋友</div>
+                    </div>
+                `;
+            } else {
+                rightContainer.innerHTML = '';
+                allOnlineUsers.forEach(u => {
+                    const initial = (u.nickname || 'U').charAt(0).toUpperCase();
+                    const card = document.createElement('div');
+                    card.className = 'panel-member-card';
+                    card.innerHTML = `
+                        <div class="panel-avatar">${initial}</div>
+                        <div style="display:flex; flex-direction:column; overflow:hidden; flex:1;">
+                            <div style="font-size:13px; font-weight:700; color:var(--text-title); white-space:nowrap; text-overflow:ellipsis; overflow:hidden;">
+                                ${escapeHtml(u.nickname)} ${u.uid === myUid ? '<span style="color:var(--brand-primary); font-size:11px;">(我)</span>' : ''}
+                            </div>
+                            <div style="font-size:11px; color:var(--speaking-green); display:flex; align-items:center; gap:4px;">
+                                <span>🔊 ${escapeHtml(u.roomName)}</span>
+                            </div>
+                        </div>
+                    `;
+                    rightContainer.appendChild(card);
                 });
             }
         }
