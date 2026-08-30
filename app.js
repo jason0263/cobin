@@ -630,17 +630,27 @@
                 const videoStream = new MediaStream([event.track]);
                 if (peerObj.videoEl) {
                     peerObj.videoEl.muted = true;
+                    peerObj.videoEl.autoplay = true;
                     peerObj.videoEl.playsInline = true;
                     peerObj.videoEl.setAttribute('playsinline', '');
                     peerObj.videoEl.setAttribute('webkit-playsinline', '');
                     peerObj.videoEl.srcObject = videoStream;
-                    peerObj.videoEl.play().catch(err => {
-                        console.warn('[Cobin] 視訊播放重試:', err);
-                    });
+                    const playPromise = peerObj.videoEl.play();
+                    if (playPromise !== undefined) {
+                        playPromise.catch(err => {
+                            console.warn('[Cobin] 視訊播放重試:', err);
+                        });
+                    }
                 }
                 if (peerObj.avatarEl) {
                     peerObj.avatarEl.style.display = 'none';
                 }
+                const tile = peerObj.videoTile || document.getElementById(`tile-${targetUid}`);
+                if (tile) {
+                    tile.classList.add('is-screen');
+                }
+                spotlightUid = targetUid;
+                updateStageLayout();
             } else if (event.track.kind === 'audio') {
                 // 2. 純音訊軌道綁定至獨立 <audio> 標籤 (100% 確保揚聲器與耳機響亮清晰)
                 const audioStream = new MediaStream([event.track]);
@@ -1056,7 +1066,7 @@
         if (!isScreenSharing) {
             try {
                 if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
-                    showToast('⚠️ 您的瀏覽器或設備不支援螢幕分享');
+                    showToast('📱 手機系統受安全限制不支援分享手機螢幕，請在電腦端發起分享（手機可即時觀看！）');
                     return;
                 }
 
