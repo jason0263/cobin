@@ -5,62 +5,60 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     
-    <!-- PWA & Mobile App Support -->
+    <!-- PWA & Mobile Fullscreen Support -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="theme-color" content="#090b11" />
+    <meta name="theme-color" content="#090b10" />
     <link rel="manifest" href="manifest.json" />
 
     <title>Cobin Voice & Video - 頂級即時語音與視訊通話</title>
 
-    <!-- Google Fonts: Outfit & Plus Jakarta Sans -->
+    <!-- Google Fonts: Inter & Outfit -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
 
     <style>
         :root {
-            /* 奢華暗夜配色 */
-            --bg-base: #080a0f;
-            --bg-surface: #0e111a;
-            --bg-sidebar: #121622;
-            --bg-card: rgba(22, 28, 42, 0.7);
-            --bg-card-hover: rgba(30, 38, 58, 0.85);
+            /* 🌌 極致黑曜石暗夜調 (Obsidian Dark Theme) */
+            --bg-body: #07090e;
+            --bg-sidebar: #0e121b;
+            --bg-card: #141926;
+            --bg-tile: #0b0f17;
             
-            /* 毛玻璃與發光微邊框 */
-            --glass-bg: rgba(18, 24, 38, 0.8);
+            /* 毛玻璃與發光邊框 */
+            --glass-card: rgba(20, 26, 38, 0.75);
             --glass-border: rgba(255, 255, 255, 0.08);
             --glass-border-hover: rgba(255, 255, 255, 0.2);
             --glass-pill: rgba(14, 18, 28, 0.88);
             
-            /* 品牌漸變色系 */
-            --accent: #5865f2;
-            --accent-glow: rgba(88, 101, 242, 0.45);
-            --accent-gradient: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #d946ef 100%);
-            --accent-green: #22c55e;
-            --accent-green-glow: rgba(34, 197, 94, 0.4);
-            --accent-red: #ef4444;
-            --accent-red-gradient: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            /* 品牌與強調色系 */
+            --brand-primary: #5865f2;
+            --brand-gradient: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%);
+            --speaking-green: #10b981;
+            --speaking-glow: rgba(16, 185, 129, 0.35);
+            --danger-red: #ef4444;
+            --danger-gradient: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
             
-            /* 精緻文字排版 */
-            --text-primary: #f8fafc;
-            --text-secondary: #94a3b8;
+            /* 文字層次 */
+            --text-title: #f8fafc;
+            --text-body: #cbd5e1;
             --text-muted: #64748b;
             
-            /* 圓角與陰影 */
-            --radius-sm: 10px;
-            --radius-md: 16px;
-            --radius-lg: 22px;
+            /* 圓角 */
+            --radius-sm: 8px;
+            --radius-md: 14px;
+            --radius-lg: 20px;
             --radius-pill: 9999px;
             
-            --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.3);
-            --shadow-md: 0 10px 30px rgba(0, 0, 0, 0.5);
-            --shadow-lg: 0 20px 50px rgba(0, 0, 0, 0.7);
+            /* 陰影 */
+            --shadow-tile: 0 10px 30px rgba(0, 0, 0, 0.5);
+            --shadow-float: 0 20px 50px rgba(0, 0, 0, 0.75);
             
-            --font-display: 'Outfit', -apple-system, sans-serif;
-            --font-body: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
-            --safe-bottom: env(safe-area-inset-bottom, 14px);
+            --font-display: 'Outfit', sans-serif;
+            --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            --safe-bottom: env(safe-area-inset-bottom, 16px);
         }
 
         * {
@@ -72,276 +70,206 @@
         }
 
         html, body {
-            background-color: var(--bg-base);
-            color: var(--text-primary);
-            font-family: var(--font-body);
+            background-color: var(--bg-body);
+            color: var(--text-title);
+            font-family: var(--font-ui);
             height: 100%;
             height: -webkit-fill-available;
             overflow: hidden;
             display: flex;
-            position: relative;
         }
 
-        /* 🌌 背景環境光暈 (Ambient Lighting) */
+        /* 🌌 背景極光暗光 (Ambient Light) */
         body::before {
             content: '';
             position: absolute;
-            top: -20%;
-            left: 20%;
-            width: 600px;
-            height: 600px;
-            background: radial-gradient(circle, rgba(99, 102, 241, 0.12) 0%, rgba(139, 92, 246, 0.04) 50%, transparent 70%);
-            pointer-events: none;
-            z-index: 0;
-        }
-
-        body::after {
-            content: '';
-            position: absolute;
-            bottom: -10%;
-            right: 15%;
+            top: -15%;
+            left: 25%;
             width: 500px;
             height: 500px;
-            background: radial-gradient(circle, rgba(217, 70, 239, 0.08) 0%, rgba(34, 197, 94, 0.03) 50%, transparent 70%);
+            background: radial-gradient(circle, rgba(99, 102, 241, 0.08) 0%, transparent 70%);
             pointer-events: none;
             z-index: 0;
         }
 
-        /* 🌟 最左側伺服器圖示欄 (Server Rail) */
-        .server-rail {
-            width: 76px;
-            background: #06070a;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            padding: 18px 0;
-            gap: 14px;
-            border-right: 1px solid var(--glass-border);
-            z-index: 30;
-            position: relative;
-        }
-
-        .server-icon {
-            width: 50px;
-            height: 50px;
-            border-radius: var(--radius-pill);
-            background: var(--bg-surface);
-            border: 1px solid var(--glass-border);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: var(--text-primary);
-            cursor: pointer;
-            position: relative;
-            transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-        }
-
-        .server-icon.active, .server-icon:hover {
-            border-radius: 18px;
-            background: var(--accent-gradient);
-            box-shadow: 0 8px 24px var(--accent-glow);
-            border-color: rgba(255, 255, 255, 0.3);
-            transform: scale(1.05);
-        }
-
-        .server-icon svg {
-            width: 26px;
-            height: 26px;
-            fill: currentColor;
-            filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.4));
-        }
-
-        .server-pill-indicator {
-            position: absolute;
-            left: -4px;
-            top: calc(50% - 10px);
-            width: 8px;
-            height: 20px;
-            background: #fff;
-            border-radius: 0 4px 4px 0;
-            opacity: 0;
-            transition: all 0.25s ease;
-        }
-
-        .server-icon.active .server-pill-indicator {
-            opacity: 1;
-            height: 36px;
-            top: calc(50% - 18px);
-        }
-
-        .server-divider {
-            width: 36px;
-            height: 2px;
-            background: var(--glass-border);
-            border-radius: 2px;
-        }
-
-        /* 📋 側邊欄 (Sidebar) */
+        /* 📋 現代一體化側邊欄 (Sidebar) */
         .sidebar {
             width: 280px;
             background: var(--bg-sidebar);
             display: flex;
             flex-direction: column;
             border-right: 1px solid var(--glass-border);
-            z-index: 25;
-            transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
-            backdrop-filter: blur(20px);
+            z-index: 30;
+            flex-shrink: 0;
+            transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
         }
 
-        .sidebar-header {
-            height: 62px;
+        .sidebar-brand {
+            height: 64px;
             padding: 0 20px;
             display: flex;
             align-items: center;
             justify-content: space-between;
             border-bottom: 1px solid var(--glass-border);
+        }
+
+        .brand-logo-box {
+            display: flex;
+            align-items: center;
+            gap: 10px;
             font-family: var(--font-display);
-            font-weight: 700;
-            font-size: 16px;
-            letter-spacing: -0.2px;
+            font-weight: 800;
+            font-size: 18px;
+            letter-spacing: -0.3px;
+        }
+
+        .brand-icon {
+            width: 34px;
+            height: 34px;
+            border-radius: 10px;
+            background: var(--brand-gradient);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 14px rgba(99, 102, 241, 0.4);
+        }
+
+        .brand-icon svg {
+            width: 18px;
+            height: 18px;
+            fill: #fff;
         }
 
         .status-badge-dot {
-            display: inline-block;
-            width: 9px;
-            height: 9px;
-            background: var(--accent-green);
+            width: 8px;
+            height: 8px;
+            background: var(--speaking-green);
             border-radius: 50%;
-            margin-right: 8px;
-            box-shadow: 0 0 10px var(--accent-green);
+            display: inline-block;
+            box-shadow: 0 0 8px var(--speaking-green);
             animation: pulseGlow 2s infinite;
         }
 
         @keyframes pulseGlow {
-            0%, 100% { transform: scale(1); opacity: 1; }
-            50% { transform: scale(1.25); opacity: 0.8; }
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.6; transform: scale(1.2); }
         }
 
-        .channels-list {
+        /* 頻道清單 */
+        .channels-wrapper {
             flex: 1;
-            padding: 20px 14px;
+            padding: 18px 12px;
             overflow-y: auto;
             display: flex;
             flex-direction: column;
-            gap: 10px;
+            gap: 8px;
         }
 
-        .category-title {
+        .section-label {
             font-size: 11px;
             font-weight: 800;
             color: var(--text-muted);
             text-transform: uppercase;
             letter-spacing: 0.8px;
-            padding: 6px 10px;
+            padding: 6px 12px;
         }
 
-        /* 🎙️ 房間項目 (Room Cards) */
-        .room-item {
+        .room-card {
             display: flex;
             flex-direction: column;
-            padding: 14px 16px;
+            padding: 12px 14px;
             border-radius: var(--radius-md);
-            cursor: pointer;
-            transition: all 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
-            background: rgba(255, 255, 255, 0.02);
+            background: transparent;
             border: 1px solid transparent;
-            position: relative;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
         }
 
-        .room-item:hover {
-            background: var(--bg-card-hover);
-            border-color: var(--glass-border-hover);
-            transform: translateY(-1px);
+        .room-card:hover {
+            background: rgba(255, 255, 255, 0.04);
+            border-color: var(--glass-border);
         }
 
-        .room-item.active {
-            background: rgba(99, 102, 241, 0.16);
-            border-color: rgba(99, 102, 241, 0.5);
-            box-shadow: 0 8px 24px rgba(99, 102, 241, 0.18);
+        .room-card.active {
+            background: rgba(99, 102, 241, 0.14);
+            border-color: rgba(99, 102, 241, 0.4);
+            box-shadow: 0 4px 16px rgba(99, 102, 241, 0.15);
         }
 
-        .room-main-row {
+        .room-header-row {
             display: flex;
             align-items: center;
             justify-content: space-between;
         }
 
-        .room-info {
+        .room-title-group {
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 10px;
             font-weight: 600;
             font-size: 14px;
         }
 
         .room-icon-box {
-            width: 34px;
-            height: 34px;
-            border-radius: 10px;
+            font-size: 16px;
+            width: 30px;
+            height: 30px;
+            border-radius: 8px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 16px;
-            background: rgba(255, 255, 255, 0.06);
-            border: 1px solid var(--glass-border);
-            transition: transform 0.2s ease;
+            background: rgba(255, 255, 255, 0.05);
         }
 
-        .room-item:hover .room-icon-box {
-            transform: scale(1.1);
-        }
-
-        .room-count-badge {
+        .room-badge {
             font-size: 11px;
-            padding: 4px 10px;
-            background: rgba(255, 255, 255, 0.08);
+            font-weight: 700;
+            padding: 3px 8px;
             border-radius: var(--radius-pill);
-            color: var(--text-secondary);
-            font-weight: 600;
+            background: rgba(255, 255, 255, 0.06);
+            color: var(--text-muted);
         }
 
-        .room-item.active .room-count-badge {
-            background: var(--accent);
+        .room-card.active .room-badge {
+            background: var(--brand-primary);
             color: #fff;
-            box-shadow: 0 2px 8px var(--accent-glow);
         }
 
-        /* 房間在線成員子清單 */
-        .room-users-sublist {
-            margin-top: 10px;
-            padding-top: 8px;
-            border-top: 1px dashed rgba(255, 255, 255, 0.08);
+        /* 房間在線成員子名單 */
+        .room-members-list {
+            margin-top: 8px;
+            padding-top: 6px;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
             display: flex;
             flex-direction: column;
-            gap: 6px;
+            gap: 4px;
         }
 
-        .room-users-sublist:empty {
+        .room-members-list:empty {
             display: none;
         }
 
-        .room-user-tag {
+        .member-tag {
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 6px;
             font-size: 12px;
-            color: var(--text-secondary);
-            padding: 4px 8px;
+            color: var(--text-body);
+            padding: 3px 6px;
             border-radius: 6px;
-            background: rgba(0, 0, 0, 0.25);
+            background: rgba(0, 0, 0, 0.2);
         }
 
-        .room-user-tag .user-dot {
-            width: 6px;
-            height: 6px;
+        .member-tag .dot {
+            width: 5px;
+            height: 5px;
             border-radius: 50%;
-            background: var(--accent-green);
-            box-shadow: 0 0 6px var(--accent-green);
+            background: var(--speaking-green);
         }
 
-        /* 👤 個人狀態欄 (User Profile Bar) */
-        .user-profile-bar {
-            height: 72px;
+        /* 底部個人資料卡片 */
+        .user-status-card {
+            height: 68px;
             padding: 0 16px;
             background: #090c13;
             border-top: 1px solid var(--glass-border);
@@ -350,40 +278,33 @@
             justify-content: space-between;
         }
 
-        .user-profile-info {
+        .user-clickable-row {
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 10px;
             cursor: pointer;
-            padding: 8px 10px;
-            border-radius: var(--radius-md);
+            padding: 6px 8px;
+            border-radius: var(--radius-sm);
             transition: background 0.2s ease;
             flex: 1;
         }
 
-        .user-profile-info:hover {
+        .user-clickable-row:hover {
             background: rgba(255, 255, 255, 0.06);
         }
 
-        .user-avatar-sm {
-            width: 40px;
-            height: 40px;
+        .my-avatar-circle {
+            width: 36px;
+            height: 36px;
             border-radius: 50%;
-            background: var(--accent-gradient);
+            background: var(--brand-gradient);
             display: flex;
             align-items: center;
             justify-content: center;
             font-weight: 700;
-            font-size: 16px;
+            font-size: 15px;
             color: #fff;
-            box-shadow: 0 4px 14px var(--accent-glow);
-            border: 2px solid rgba(255, 255, 255, 0.2);
-        }
-
-        .user-text-col {
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
+            box-shadow: 0 2px 10px rgba(99, 102, 241, 0.35);
         }
 
         /* 🎭 主通話舞台 (Main Stage) */
@@ -393,68 +314,47 @@
             flex-direction: column;
             height: 100%;
             position: relative;
-            background: radial-gradient(ellipse at center bottom, #111522 0%, #080a0f 80%);
+            background: radial-gradient(ellipse at center bottom, #101524 0%, #07090e 80%);
             overflow: hidden;
-            z-index: 5;
-        }
-
-        /* 全局連線狀態膠囊 */
-        .global-top-bar {
-            position: absolute;
-            top: 18px;
-            right: 22px;
-            z-index: 40;
-        }
-
-        .global-status-pill {
-            display: flex;
-            align-items: center;
-            padding: 8px 16px;
-            background: var(--glass-bg);
-            border: 1px solid var(--glass-border);
-            border-radius: var(--radius-pill);
-            backdrop-filter: blur(16px);
-            font-size: 12px;
-            font-weight: 600;
-            box-shadow: var(--shadow-sm);
+            z-index: 10;
         }
 
         /* 頂部通話標題列 */
         .stage-header {
-            height: 64px;
+            height: 60px;
             padding: 0 24px;
             display: flex;
             align-items: center;
             justify-content: space-between;
             border-bottom: 1px solid var(--glass-border);
-            background: rgba(8, 10, 15, 0.4);
-            backdrop-filter: blur(12px);
+            background: rgba(7, 9, 14, 0.6);
+            backdrop-filter: blur(16px);
             z-index: 20;
         }
 
-        .stage-room-title {
+        .stage-title-left {
             display: flex;
             align-items: center;
-            gap: 14px;
+            gap: 12px;
             font-family: var(--font-display);
-            font-size: 18px;
+            font-size: 17px;
             font-weight: 700;
-            letter-spacing: -0.3px;
         }
 
-        .call-duration {
+        .timer-badge {
             display: flex;
             align-items: center;
-            padding: 4px 12px;
-            background: rgba(34, 197, 94, 0.12);
-            border: 1px solid rgba(34, 197, 94, 0.3);
+            gap: 6px;
+            padding: 3px 10px;
+            background: rgba(16, 185, 129, 0.12);
+            border: 1px solid rgba(16, 185, 129, 0.3);
             border-radius: var(--radius-pill);
             font-size: 12px;
             font-weight: 600;
-            color: var(--accent-green);
+            color: var(--speaking-green);
         }
 
-        .btn-menu-mobile {
+        .mobile-toggle-btn {
             display: none;
             background: var(--bg-card);
             border: 1px solid var(--glass-border);
@@ -466,175 +366,155 @@
             cursor: pointer;
         }
 
-        /* 🏠 大廳畫面 (Lobby Screen) */
+        /* 🏠 大廳歡迎頁面 (Lobby Screen) */
         .lobby-screen {
             flex: 1;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            padding: 30px;
+            padding: 24px;
             text-align: center;
             z-index: 10;
         }
 
-        .lobby-icon-box {
-            width: 88px;
-            height: 88px;
-            border-radius: 28px;
-            background: var(--accent-gradient);
+        .lobby-hero-icon {
+            width: 76px;
+            height: 76px;
+            border-radius: 24px;
+            background: var(--brand-gradient);
             display: flex;
             align-items: center;
             justify-content: center;
-            margin-bottom: 24px;
-            box-shadow: 0 16px 40px var(--accent-glow);
-            border: 1px solid rgba(255, 255, 255, 0.3);
+            margin-bottom: 20px;
+            box-shadow: 0 12px 36px rgba(99, 102, 241, 0.4);
+            border: 1px solid rgba(255, 255, 255, 0.2);
             animation: floatSlow 4s ease-in-out infinite;
         }
 
         @keyframes floatSlow {
             0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-8px); }
+            50% { transform: translateY(-6px); }
         }
 
         .lobby-title {
             font-family: var(--font-display);
-            font-size: 32px;
+            font-size: 28px;
             font-weight: 800;
-            letter-spacing: -0.5px;
-            margin-bottom: 12px;
-            background: linear-gradient(135deg, #ffffff 30%, #94a3b8 100%);
+            letter-spacing: -0.4px;
+            margin-bottom: 10px;
+            background: linear-gradient(135deg, #ffffff 40%, #94a3b8 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
         }
 
-        .lobby-desc {
-            font-size: 15px;
-            color: var(--text-secondary);
-            max-width: 480px;
+        .lobby-subtitle {
+            font-size: 14px;
+            color: var(--text-muted);
+            max-width: 440px;
             line-height: 1.6;
-            margin-bottom: 36px;
+            margin-bottom: 30px;
         }
 
-        .lobby-room-cards {
+        .lobby-grid-cards {
             display: flex;
-            gap: 16px;
+            gap: 14px;
             flex-wrap: wrap;
             justify-content: center;
-            max-width: 800px;
+            max-width: 760px;
         }
 
-        .lobby-card {
+        .lobby-room-item {
             background: var(--bg-card);
             border: 1px solid var(--glass-border);
-            padding: 22px 28px;
+            padding: 18px 24px;
             border-radius: var(--radius-lg);
             display: flex;
             align-items: center;
-            gap: 16px;
+            gap: 14px;
             cursor: pointer;
-            backdrop-filter: blur(16px);
-            transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+            transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+            min-width: 200px;
             text-align: left;
-            min-width: 220px;
         }
 
-        .lobby-card:hover {
-            transform: translateY(-6px) scale(1.02);
-            background: var(--bg-card-hover);
+        .lobby-room-item:hover {
+            transform: translateY(-4px);
             border-color: rgba(99, 102, 241, 0.5);
-            box-shadow: 0 16px 36px rgba(0, 0, 0, 0.6);
+            background: rgba(30, 38, 58, 0.85);
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
         }
 
-        .lobby-card .card-emoji {
-            font-size: 28px;
-            filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.4));
-        }
-
-        /* 📺 視訊網格佈局 (Video Grid) */
+        /* 📺 視訊網格容器 (Video Grid Container) */
         .video-grid-container {
             flex: 1;
-            padding: 20px 24px 110px 24px;
-            display: flex;
-            flex-wrap: wrap;
+            padding: 20px 24px 100px 24px;
+            display: grid;
+            gap: 16px;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
             align-content: center;
             justify-content: center;
-            gap: 16px;
             overflow-y: auto;
+            width: 100%;
             height: 100%;
-            transition: all 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
+            transition: all 0.3s ease;
         }
 
-        .video-grid-container .video-tile {
-            flex: 1 1 360px;
-            max-width: 680px;
-            min-width: 280px;
-            aspect-ratio: 16 / 9;
-            max-height: calc(50vh - 60px);
+        .video-grid-container.single-user {
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         .video-grid-container.single-user .video-tile {
-            flex: 1 1 760px;
-            max-width: 920px;
-            max-height: calc(100vh - 180px);
+            width: 100%;
+            max-width: 780px;
+            aspect-ratio: 16 / 9;
         }
 
-        /* 🌟 大屏幕焦點模式 (Spotlight) */
+        /* 🌟 大屏幕聚焦模式 (Spotlight) */
         .video-grid-container.spotlight-mode {
             display: flex !important;
             flex-direction: row !important;
-            flex-wrap: nowrap !important;
             align-items: stretch !important;
-            justify-content: flex-start !important;
             gap: 16px !important;
             overflow: hidden !important;
         }
 
         .video-grid-container.spotlight-mode .video-tile.is-spotlight {
             flex: 1 1 80% !important;
-            max-width: unset !important;
-            min-width: unset !important;
             height: 100% !important;
-            max-height: calc(100vh - 170px) !important;
+            max-height: calc(100vh - 160px) !important;
             order: -1 !important;
             border-color: rgba(99, 102, 241, 0.8) !important;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8) !important;
             z-index: 10;
         }
 
-        .video-grid-container.spotlight-mode .video-tile.is-spotlight video {
-            object-fit: contain !important;
-            background: #000;
-        }
-
         .video-grid-container.spotlight-mode .video-tile:not(.is-spotlight) {
-            flex: 0 0 220px !important;
-            max-width: 220px !important;
-            min-width: unset !important;
-            height: 130px !important;
+            flex: 0 0 200px !important;
+            height: 120px !important;
             aspect-ratio: 16 / 9 !important;
             order: 1 !important;
-            cursor: pointer;
         }
 
         /* 🎴 視訊卡片 (Video Tile) */
         .video-tile {
             position: relative;
-            background: #0c0f18;
+            background: var(--bg-tile);
             border-radius: var(--radius-lg);
             overflow: hidden;
             aspect-ratio: 16 / 9;
-            box-shadow: var(--shadow-md);
+            box-shadow: var(--shadow-tile);
             border: 2px solid rgba(255, 255, 255, 0.08);
             display: flex;
             align-items: center;
             justify-content: center;
             cursor: pointer;
-            transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), border-color 0.25s ease, box-shadow 0.25s ease;
+            transition: all 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
         }
 
         .video-tile:hover {
-            border-color: rgba(255, 255, 255, 0.25);
+            border-color: rgba(255, 255, 255, 0.22);
             transform: translateY(-2px);
         }
 
@@ -647,86 +527,80 @@
             background: #000;
         }
 
-        /* 🟢 正在說話動態雙層光暈 (Speaking Indicator) */
+        /* 🟢 說話動態綠色呼吸外框 (Speaking Indicator) */
         .video-tile.speaking {
-            border-color: var(--accent-green) !important;
-            box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.8), 0 12px 36px var(--accent-green-glow) !important;
+            border-color: var(--speaking-green) !important;
+            box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.8), 0 10px 30px var(--speaking-glow) !important;
         }
 
         .video-tile video {
             width: 100%;
             height: 100%;
             object-fit: cover;
-            background: #090c14;
+            background: #080b12;
         }
 
         .video-tile.is-local:not(.is-screen) video {
             transform: scaleX(-1);
         }
 
-        /* 視訊懸浮工具列 */
+        /* 視訊頂部懸浮工具列 */
         .tile-actions-bar {
             position: absolute;
             top: 12px;
             right: 12px;
             display: flex;
-            gap: 8px;
+            gap: 6px;
             opacity: 0;
             transition: opacity 0.2s ease;
-            z-index: 15;
+            z-index: 20;
         }
 
         .video-tile:hover .tile-actions-bar,
         .video-tile:active .tile-actions-bar,
-        .video-tile.is-spotlight .tile-actions-bar,
         .video-tile.cinema-fullscreen .tile-actions-bar {
             opacity: 1;
         }
 
         .tile-btn {
-            background: rgba(12, 16, 26, 0.8);
+            background: rgba(10, 14, 22, 0.82);
             backdrop-filter: blur(12px);
             border: 1px solid rgba(255, 255, 255, 0.2);
             color: #fff;
             padding: 0 10px;
-            height: 34px;
+            height: 32px;
             border-radius: var(--radius-sm);
             display: flex;
             align-items: center;
-            justify-content: center;
-            gap: 5px;
+            gap: 4px;
             font-size: 12px;
             font-weight: 600;
             cursor: pointer;
-            transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+            transition: all 0.2s ease;
         }
 
         .tile-btn:hover {
-            background: var(--accent-gradient);
+            background: var(--brand-gradient);
             border-color: rgba(255, 255, 255, 0.4);
-            transform: scale(1.06);
+            transform: scale(1.05);
         }
 
         .tile-btn svg {
-            width: 15px;
-            height: 15px;
+            width: 14px;
+            height: 14px;
             fill: currentColor;
         }
 
-        /* 🎬 頂級劇院全螢幕模式 (100% 滿版無黑邊) */
+        /* 🎬 劇院全螢幕模式 */
         .video-tile.cinema-fullscreen {
             position: fixed !important;
             top: 0 !important;
             left: 0 !important;
             width: 100vw !important;
             height: 100vh !important;
-            max-width: 100vw !important;
-            max-height: 100vh !important;
             z-index: 999999 !important;
             border-radius: 0 !important;
             border: none !important;
-            margin: 0 !important;
-            padding: 0 !important;
             background: #000 !important;
         }
 
@@ -734,74 +608,69 @@
             width: 100vw !important;
             height: 100vh !important;
             object-fit: contain !important;
-            background: #000 !important;
         }
 
         .video-tile.cinema-fullscreen .tile-actions-bar {
             opacity: 1 !important;
-            top: env(safe-area-inset-top, 24px) !important;
-            right: env(safe-area-inset-right, 24px) !important;
-            gap: 12px !important;
+            top: env(safe-area-inset-top, 20px) !important;
+            right: env(safe-area-inset-right, 20px) !important;
         }
 
         .video-tile.cinema-fullscreen .btn-exit-fullscreen {
             display: flex !important;
-            background: var(--accent-red-gradient) !important;
+            background: var(--danger-gradient) !important;
             border-radius: var(--radius-pill) !important;
-            padding: 8px 20px !important;
-            height: 40px !important;
-            font-size: 14px !important;
+            padding: 8px 18px !important;
+            height: 38px !important;
             font-weight: 700 !important;
-            color: #fff !important;
-            box-shadow: 0 6px 24px rgba(239, 68, 68, 0.5) !important;
         }
 
         .video-tile:not(.cinema-fullscreen) .btn-exit-fullscreen {
             display: none !important;
         }
 
-        /* 👤 頭像佔位圖層 (Avatar Placeholder) */
+        /* 👤 頭像卡片圖層 (Avatar Placeholder) */
         .video-tile .avatar-placeholder {
             position: absolute;
             inset: 0;
-            background: radial-gradient(circle at center, #182032 0%, #0d111c 100%);
+            background: radial-gradient(circle at center, #161c2c 0%, #0b0f17 100%);
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            gap: 12px;
+            gap: 10px;
             z-index: 5;
         }
 
         .avatar-circle-lg {
-            width: 80px;
-            height: 80px;
+            width: 72px;
+            height: 72px;
             border-radius: 50%;
-            background: var(--accent-gradient);
+            background: var(--brand-gradient);
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 32px;
+            font-size: 28px;
             font-weight: 800;
             color: #fff;
-            box-shadow: 0 12px 32px var(--accent-glow);
-            border: 3px solid rgba(255, 255, 255, 0.25);
+            box-shadow: 0 8px 24px rgba(99, 102, 241, 0.4);
+            border: 2px solid rgba(255, 255, 255, 0.2);
         }
 
         .avatar-name-lg {
-            font-size: 16px;
+            font-size: 15px;
             font-weight: 700;
-            color: var(--text-primary);
+            color: var(--text-title);
         }
 
-        /* 標籤角標 (Video Tag) */
+        /* 底部狀態膠囊 (Video Tag) */
         .video-tag {
             position: absolute;
-            bottom: 12px;
-            left: 12px;
-            background: rgba(10, 14, 24, 0.75);
+            bottom: 10px;
+            left: 10px;
+            background: rgba(8, 11, 18, 0.8);
             backdrop-filter: blur(10px);
-            padding: 6px 12px;
+            padding: 5px 10px;
             border-radius: var(--radius-sm);
             font-size: 12px;
             font-weight: 600;
@@ -815,28 +684,26 @@
         .mic-status-icon {
             width: 14px;
             height: 14px;
-            fill: var(--accent-green);
+            fill: var(--speaking-green);
         }
 
         .mic-status-icon.muted {
-            fill: var(--accent-red);
+            fill: var(--danger-red);
         }
 
         .screen-badge {
-            background: var(--accent-gradient);
+            background: var(--brand-gradient);
             color: #fff;
-            padding: 2px 8px;
+            padding: 2px 6px;
             border-radius: 4px;
             font-size: 10px;
             font-weight: 700;
-            margin-left: 4px;
-            box-shadow: 0 2px 6px var(--accent-glow);
         }
 
         /* 💊 底部浮動通話按鈕條 (Floating Action Pill Bar) */
         .floating-action-bar {
             position: absolute;
-            bottom: max(24px, var(--safe-bottom));
+            bottom: max(20px, var(--safe-bottom));
             left: 50%;
             transform: translateX(-50%);
             display: flex;
@@ -844,12 +711,12 @@
             gap: 12px;
             background: var(--glass-pill);
             backdrop-filter: blur(28px);
-            padding: 10px 18px;
+            padding: 8px 16px;
             border-radius: var(--radius-pill);
-            border: 1px solid rgba(255, 255, 255, 0.14);
-            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.75), inset 0 1px 1px rgba(255, 255, 255, 0.15);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            box-shadow: var(--shadow-float);
             z-index: 50;
-            transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s ease;
+            transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
         }
 
         .floating-action-bar.hidden {
@@ -859,8 +726,8 @@
         }
 
         .call-btn {
-            width: 50px;
-            height: 50px;
+            width: 48px;
+            height: 48px;
             border-radius: 50%;
             border: 1px solid var(--glass-border);
             background: rgba(255, 255, 255, 0.08);
@@ -869,15 +736,13 @@
             align-items: center;
             justify-content: center;
             cursor: pointer;
-            transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
-            position: relative;
+            transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
         }
 
         .call-btn:hover {
-            transform: translateY(-3px) scale(1.08);
-            background: rgba(255, 255, 255, 0.18);
-            border-color: rgba(255, 255, 255, 0.3);
-            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+            transform: translateY(-2px) scale(1.06);
+            background: rgba(255, 255, 255, 0.16);
+            border-color: rgba(255, 255, 255, 0.25);
         }
 
         .call-btn:active {
@@ -885,51 +750,51 @@
         }
 
         .call-btn svg {
-            width: 22px;
-            height: 22px;
+            width: 20px;
+            height: 20px;
             fill: currentColor;
         }
 
         .call-btn.btn-hangup {
-            background: var(--accent-red-gradient);
-            border-color: rgba(255, 255, 255, 0.3);
-            box-shadow: 0 8px 24px rgba(239, 68, 68, 0.45);
-            width: 54px;
-            height: 54px;
+            background: var(--danger-gradient);
+            border-color: rgba(255, 255, 255, 0.25);
+            box-shadow: 0 6px 20px rgba(239, 68, 68, 0.4);
+            width: 52px;
+            height: 52px;
         }
 
         .call-btn.btn-hangup:hover {
-            box-shadow: 0 12px 30px rgba(239, 68, 68, 0.65);
+            box-shadow: 0 8px 24px rgba(239, 68, 68, 0.6);
         }
 
         .call-btn.off {
-            background: rgba(239, 68, 68, 0.18);
-            border-color: rgba(239, 68, 68, 0.4);
-            color: var(--accent-red);
+            background: rgba(239, 68, 68, 0.2);
+            border-color: rgba(239, 68, 68, 0.45);
+            color: var(--danger-red);
         }
 
         .call-btn.btn-screen.active {
-            background: var(--accent-gradient);
-            box-shadow: 0 8px 24px var(--accent-glow);
+            background: var(--brand-gradient);
+            box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
         }
 
-        /* 💬 Toast 提示 */
+        /* 💬 Toast 訊息 */
         .toast-msg {
             position: fixed;
-            top: 24px;
+            top: 20px;
             left: 50%;
             transform: translate(-50%, -40px);
             background: rgba(14, 18, 28, 0.92);
             backdrop-filter: blur(20px);
             border: 1px solid rgba(255, 255, 255, 0.15);
-            padding: 12px 24px;
+            padding: 10px 22px;
             border-radius: var(--radius-pill);
-            font-size: 14px;
+            font-size: 13px;
             font-weight: 600;
-            box-shadow: var(--shadow-lg);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
             z-index: 999999;
             opacity: 0;
-            transition: all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+            transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
             pointer-events: none;
         }
 
@@ -940,10 +805,6 @@
 
         /* 📱 手機 RWD 適配 */
         @media (max-width: 768px) {
-            .server-rail {
-                display: none;
-            }
-
             .sidebar {
                 position: fixed;
                 top: 0;
@@ -952,7 +813,7 @@
                 width: 280px;
                 transform: translateX(-100%);
                 z-index: 100;
-                box-shadow: 20px 0 50px rgba(0, 0, 0, 0.8);
+                box-shadow: 20px 0 50px rgba(0, 0, 0, 0.85);
             }
 
             .sidebar.mobile-open {
@@ -964,7 +825,7 @@
                 position: fixed;
                 inset: 0;
                 background: rgba(0, 0, 0, 0.65);
-                backdrop-filter: blur(6px);
+                backdrop-filter: blur(4px);
                 z-index: 90;
             }
 
@@ -972,22 +833,18 @@
                 display: block;
             }
 
-            .btn-menu-mobile {
+            .mobile-toggle-btn {
                 display: flex;
             }
 
             .video-grid-container {
-                padding: 14px 12px 90px 12px;
-                gap: 12px;
-            }
-
-            .video-grid-container .video-tile {
-                flex: 1 1 100%;
-                max-height: calc(50vh - 50px);
+                padding: 12px 12px 85px 12px;
+                gap: 10px;
+                grid-template-columns: 1fr;
             }
 
             .floating-action-bar {
-                padding: 8px 14px;
+                padding: 6px 12px;
                 gap: 8px;
             }
 
@@ -1005,70 +862,66 @@
 </head>
 <body>
 
-    <!-- 伺服器圖示欄 -->
-    <aside class="server-rail">
-        <div class="server-icon active" title="Cobin 主伺服器">
-            <div class="server-pill-indicator"></div>
-            <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9v-2h2v2zm0-4H9V7h2v5zm4 4h-2v-2h2v2zm0-4h-2V7h2v5z"/></svg>
-        </div>
-        <div class="server-divider"></div>
-    </aside>
-
     <!-- 手機側邊欄遮罩 -->
     <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="toggleMobileSidebar()"></div>
 
-    <!-- 頻道與房間側邊欄 -->
+    <!-- 側邊欄 (Sidebar) -->
     <aside class="sidebar" id="sidebar">
-        <div class="sidebar-header">
-            <div style="display:flex; align-items:center;">
-                <span class="status-badge-dot"></span>
-                <span>語音頻道</span>
+        <div class="sidebar-brand">
+            <div class="brand-logo-box">
+                <div class="brand-icon">
+                    <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9v-2h2v2zm0-4H9V7h2v5zm4 4h-2v-2h2v2zm0-4h-2V7h2v5z"/></svg>
+                </div>
+                <span>Cobin Call</span>
             </div>
-            <div id="wsStatusTag" style="font-size:12px; color:var(--accent-green); font-weight:700;">🟢 已連線</div>
+            <div style="font-size:12px; font-weight:700; color:var(--speaking-green); display:flex; align-items:center; gap:6px;">
+                <span class="status-badge-dot"></span>
+                <span>在線</span>
+            </div>
         </div>
 
-        <div class="channels-list">
-            <div class="category-title">🔊 語音房間 (點擊進入)</div>
+        <div class="channels-wrapper">
+            <div class="section-label">🔊 語音頻道</div>
 
-            <div class="room-item" id="room-item-room-1" onclick="handleRoomClick('room-1')">
-                <div class="room-main-row">
-                    <div class="room-info">
+            <div class="room-card" id="room-item-room-1" onclick="handleRoomClick('room-1')">
+                <div class="room-header-row">
+                    <div class="room-title-group">
                         <div class="room-icon-box">🔊</div>
                         <span>語音大廳 1</span>
                     </div>
-                    <span class="room-count-badge" id="count-room-1">0 人</span>
+                    <span class="room-badge" id="count-room-1">0 人</span>
                 </div>
-                <div class="room-users-sublist" id="users-room-1"></div>
+                <div class="room-members-list" id="users-room-1"></div>
             </div>
 
-            <div class="room-item" id="room-item-room-2" onclick="handleRoomClick('room-2')">
-                <div class="room-main-row">
-                    <div class="room-info">
+            <div class="room-card" id="room-item-room-2" onclick="handleRoomClick('room-2')">
+                <div class="room-header-row">
+                    <div class="room-title-group">
                         <div class="room-icon-box">🎮</div>
                         <span>遊戲開黑 2</span>
                     </div>
-                    <span class="room-count-badge" id="count-room-2">0 人</span>
+                    <span class="room-badge" id="count-room-2">0 人</span>
                 </div>
-                <div class="room-users-sublist" id="users-room-2"></div>
+                <div class="room-members-list" id="users-room-2"></div>
             </div>
 
-            <div class="room-item" id="room-item-room-3" onclick="handleRoomClick('room-3')">
-                <div class="room-main-row">
-                    <div class="room-info">
+            <div class="room-card" id="room-item-room-3" onclick="handleRoomClick('room-3')">
+                <div class="room-header-row">
+                    <div class="room-title-group">
                         <div class="room-icon-box">💼</div>
                         <span>私人會議 3</span>
                     </div>
-                    <span class="room-count-badge" id="count-room-3">0 人</span>
+                    <span class="room-badge" id="count-room-3">0 人</span>
                 </div>
-                <div class="room-users-sublist" id="users-room-3"></div>
+                <div class="room-members-list" id="users-room-3"></div>
             </div>
         </div>
 
-        <!-- 底部個人狀態卡片 -->
-        <div class="user-profile-bar">
-            <div class="user-profile-info" onclick="openNicknameModal()" title="點擊修改暱稱">
-                <div class="user-avatar-sm" id="myAvatarSm">U</div>
-                <div class="user-text-col">
+        <!-- 底部個人狀態欄 -->
+        <div class="user-status-card">
+            <div class="user-clickable-row" onclick="openNicknameModal()" title="點擊修改暱稱">
+                <div class="my-avatar-circle" id="myAvatarSm">U</div>
+                <div style="display:flex; flex-direction:column; overflow:hidden;">
                     <div style="font-size:14px; font-weight:700;" id="myNicknameText">訪客</div>
                     <div style="font-size:11px; color:var(--text-muted);">點擊修改暱稱 ✎</div>
                 </div>
@@ -1076,57 +929,49 @@
         </div>
     </aside>
 
-    <!-- 主通話舞台 -->
+    <!-- 主通話舞台 (Main Stage) -->
     <main class="main-stage">
-        <!-- 右上角全局連線狀態燈 -->
-        <div class="global-top-bar">
-            <div class="global-status-pill" id="globalStatusPill">
-                <span class="status-badge-dot"></span>
-                <span id="globalStatusText">🟢 伺服器在線</span>
-            </div>
-        </div>
-
         <!-- 頂部通話標題列 -->
         <header class="stage-header" id="stageHeader" style="display:none;">
-            <div class="stage-room-title">
-                <button class="btn-menu-mobile" onclick="toggleMobileSidebar()">
-                    <span>☰ 房間</span>
+            <div class="stage-title-left">
+                <button class="mobile-toggle-btn" onclick="toggleMobileSidebar()">
+                    <span>☰ 頻道</span>
                 </button>
                 <span id="currentRoomNameTitle">語音大廳 1</span>
-                <div class="call-duration">
+                <div class="timer-badge">
                     <span class="status-badge-dot"></span>
                     <span id="callDurationTimer">00:00</span>
                 </div>
             </div>
-            <div id="roomParticipantsCount" style="font-size:13px; font-weight:600; color:var(--text-secondary);">1 人在線</div>
+            <div id="roomParticipantsCount" style="font-size:13px; font-weight:600; color:var(--text-muted);">1 人在線</div>
         </header>
 
-        <!-- 大廳畫面 -->
+        <!-- 大廳畫面 (Lobby Screen) -->
         <section class="lobby-screen" id="lobbyScreen">
-            <div class="lobby-icon-box">
-                <svg width="44" height="44" viewBox="0 0 24 24" fill="white">
+            <div class="lobby-hero-icon">
+                <svg width="38" height="38" viewBox="0 0 24 24" fill="white">
                     <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9v-2h2v2zm0-4H9V7h2v5zm4 4h-2v-2h2v2zm0-4h-2V7h2v5z"/>
                 </svg>
             </div>
-            <h2 class="lobby-title">加入語音與視訊通話</h2>
-            <p class="lobby-desc">點擊下方任一房間即可立即開始通話，支援手機後台運作、螢幕分享與劇院全螢幕！</p>
-            <div class="lobby-room-cards">
-                <div class="lobby-card" onclick="handleRoomClick('room-1')">
-                    <span class="card-emoji">🔊</span>
+            <h2 class="lobby-title">開始即時通話</h2>
+            <p class="lobby-subtitle">點擊下方任一房間立即加入，支援高畫質語音、螢幕聲音分享與手機後台通話！</p>
+            <div class="lobby-grid-cards">
+                <div class="lobby-room-item" onclick="handleRoomClick('room-1')">
+                    <span style="font-size:24px;">🔊</span>
                     <div>
                         <div style="font-weight:700; font-size:15px;">語音大廳 1</div>
                         <div style="font-size:12px; color:var(--text-muted);">休閒聊天</div>
                     </div>
                 </div>
-                <div class="lobby-card" onclick="handleRoomClick('room-2')">
-                    <span class="card-emoji">🎮</span>
+                <div class="lobby-room-item" onclick="handleRoomClick('room-2')">
+                    <span style="font-size:24px;">🎮</span>
                     <div>
                         <div style="font-weight:700; font-size:15px;">遊戲開黑 2</div>
                         <div style="font-size:12px; color:var(--text-muted);">組隊開麥</div>
                     </div>
                 </div>
-                <div class="lobby-card" onclick="handleRoomClick('room-3')">
-                    <span class="card-emoji">💼</span>
+                <div class="lobby-room-item" onclick="handleRoomClick('room-3')">
+                    <span style="font-size:24px;">💼</span>
                     <div>
                         <div style="font-weight:700; font-size:15px;">私人會議 3</div>
                         <div style="font-size:12px; color:var(--text-muted);">工作討論</div>
@@ -1135,7 +980,7 @@
             </div>
         </section>
 
-        <!-- 視訊畫面區域 Video Grid -->
+        <!-- 視訊網格區域 (Video Grid) -->
         <section class="video-grid-container" id="videoGrid" style="display:none;">
             <div class="video-tile is-local" id="localVideoTile" ondblclick="toggleTileFullscreen('localVideoTile')" onclick="handleTileClick('local')">
                 <div class="tile-actions-bar">
@@ -1200,7 +1045,7 @@
                 </svg>
             </button>
 
-            <button class="call-btn btn-hangup" id="btnHangup" title="退出房間" onclick="leaveRoom()">
+            <button class="call-btn btn-hangup" id="btnHangup" title="掛斷通話" onclick="leaveRoom()">
                 <svg viewBox="0 0 24 24">
                     <path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.7.28-.28 0-.53-.11-.71-.29L.29 13.08c-.18-.17-.29-.42-.29-.7 0-.28.11-.53.29-.71C3.34 8.78 7.46 7 12 7s8.66 1.78 11.71 4.67c.18.18.29.43.29.71 0 .28-.11.53-.29.71l-2.48 2.48c-.18.18-.43.29-.71.29-.27 0-.52-.11-.7-.28-.79-.74-1.69-1.36-2.67-1.85-.33-.16-.56-.5-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z"/>
                 </svg>
@@ -1209,18 +1054,18 @@
     </main>
 
     <!-- 暱稱修改彈窗 -->
-    <div class="nickname-modal-backdrop" id="nicknameModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); backdrop-filter:blur(8px); z-index:99999; align-items:center; justify-content:center;">
-        <div style="background:var(--bg-card); border:1px solid var(--glass-border-hover); border-radius:var(--radius-lg); padding:28px; width:90%; max-width:380px; box-shadow:var(--shadow-lg);">
-            <h3 style="font-family:var(--font-display); font-size:20px; margin-bottom:14px;">修改個人暱稱</h3>
-            <input type="text" id="nicknameInput" maxlength="16" placeholder="請輸入暱稱..." style="width:100%; padding:12px 16px; border-radius:var(--radius-sm); border:1px solid var(--glass-border); background:rgba(0,0,0,0.3); color:#fff; font-size:15px; margin-bottom:20px; outline:none;" />
-            <div style="display:flex; justify-content:flex-end; gap:10px;">
-                <button onclick="closeNicknameModal()" style="padding:10px 18px; border-radius:var(--radius-sm); border:1px solid var(--glass-border); background:transparent; color:var(--text-secondary); cursor:pointer; font-weight:600;">取消</button>
-                <button onclick="saveNickname()" style="padding:10px 22px; border-radius:var(--radius-sm); border:none; background:var(--accent-gradient); color:#fff; cursor:pointer; font-weight:700; box-shadow:0 4px 14px var(--accent-glow);">保存</button>
+    <div class="nickname-modal-backdrop" id="nicknameModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.75); backdrop-filter:blur(8px); z-index:99999; align-items:center; justify-content:center;">
+        <div style="background:var(--bg-card); border:1px solid var(--glass-border-hover); border-radius:var(--radius-lg); padding:26px; width:90%; max-width:360px; box-shadow:var(--shadow-float);">
+            <h3 style="font-family:var(--font-display); font-size:18px; margin-bottom:14px;">修改個人暱稱</h3>
+            <input type="text" id="nicknameInput" maxlength="16" placeholder="請輸入暱稱..." style="width:100%; padding:12px 14px; border-radius:var(--radius-sm); border:1px solid var(--glass-border); background:rgba(0,0,0,0.4); color:#fff; font-size:14px; margin-bottom:18px; outline:none;" />
+            <div style="display:flex; justify-content:flex-end; gap:8px;">
+                <button onclick="closeNicknameModal()" style="padding:8px 16px; border-radius:var(--radius-sm); border:1px solid var(--glass-border); background:transparent; color:var(--text-muted); cursor:pointer; font-weight:600; font-size:13px;">取消</button>
+                <button onclick="saveNickname()" style="padding:8px 20px; border-radius:var(--radius-sm); border:none; background:var(--brand-gradient); color:#fff; cursor:pointer; font-weight:700; font-size:13px; box-shadow:0 4px 12px rgba(99, 102, 241, 0.4);">保存</button>
             </div>
         </div>
     </div>
 
-    <!-- 浮動提示 Toast -->
+    <!-- 浮動 Toast -->
     <div class="toast-msg" id="toastMsg">提示訊息</div>
 
     <script>
@@ -1249,6 +1094,6 @@
             }
         }
     </script>
-    <script src="app.js?v=20260830_screen_fixed_v2"></script>
+    <script src="app.js?v=20260830_flawless_ui"></script>
 </body>
 </html>

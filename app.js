@@ -796,7 +796,7 @@
                     </button>
                 </div>
                 <video autoplay muted playsinline webkit-playsinline></video>
-                <div class="avatar-placeholder" id="avatar-${uid}" style="display:none;">
+                <div class="avatar-placeholder" id="avatar-${uid}" style="display:flex;">
                     <div class="avatar-circle-lg">${initial}</div>
                     <div class="avatar-name-lg">${escapeHtml(nickname)}</div>
                 </div>
