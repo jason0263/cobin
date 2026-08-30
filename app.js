@@ -59,6 +59,8 @@
     function initAudioPool() {
         if (audioPoolInitialized) return;
         audioPoolInitialized = true;
+        // 1-sample 靜音 WAV，專門用來欺騙 iOS Safari 讓它認為這是一個合法的媒體播放
+        const SILENT_WAV = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
         for (let i = 0; i < 20; i++) {
             const a = document.createElement('audio');
             a.autoplay = true;
@@ -66,6 +68,7 @@
             a.setAttribute('playsinline', '');
             a.setAttribute('webkit-playsinline', '');
             a.style.cssText = 'position:absolute;width:1px;height:1px;opacity:0.01;pointer-events:none;';
+            a.src = SILENT_WAV;
             document.body.appendChild(a);
             audioPool.push({ el: a, uid: null });
         }
@@ -471,8 +474,9 @@
         if (audioContext && audioContext.state === 'suspended') {
             audioContext.resume().catch(() => {});
         }
+        // ★ 核心修復：不管有沒有 srcObject，只要是 pool 裡面的 audio，全部強制執行一次 play() 來獲得 iOS 免死金牌
         document.querySelectorAll('audio').forEach(el => {
-            if (el.srcObject && el.paused) {
+            if (el.paused) {
                 el.play().catch(() => {});
             }
         });
