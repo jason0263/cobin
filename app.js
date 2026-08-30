@@ -527,12 +527,14 @@
                     peerObj.avatarEl.style.display = 'none';
                 }
             } else if (event.track.kind === 'audio') {
-                // 2. 純音訊軌道綁定至獨立隱藏 <audio> 標籤 (揚聲器與耳機)
+                // 2. 純音訊軌道綁定至獨立 <audio> 標籤 (100% 確保揚聲器與耳機響亮清晰)
                 const audioStream = new MediaStream([event.track]);
                 if (peerObj.audioEl) {
+                    peerObj.audioEl.muted = false;
+                    peerObj.audioEl.volume = 1.0;
                     peerObj.audioEl.srcObject = audioStream;
                     peerObj.audioEl.play().catch(err => {
-                        console.warn('[Cobin] 音訊播放等待解鎖:', err);
+                        console.warn('[Cobin] 音訊播放等待點擊解鎖:', err);
                     });
                 }
                 setupRemoteAudioAnalysis(audioStream, targetUid);
@@ -676,6 +678,20 @@
 
         if (signal.type === 'offer') {
             try {
+                // 確保在建立 Answer 之前，本地麥克風軌道已全數注入 pc，保證 Answer 為 sendrecv 雙向音訊
+                if (!localStream) {
+                    await initLocalMedia();
+                }
+                if (localStream) {
+                    localStream.getTracks().forEach(track => {
+                        const senders = pc.getSenders();
+                        const exists = senders.some(s => s.track && (s.track.id === track.id || s.track.kind === track.kind));
+                        if (!exists) {
+                            try { pc.addTrack(track, localStream); } catch (e) {}
+                        }
+                    });
+                }
+
                 const rtcDesc = parseSessionDescription(signal, 'offer');
                 if (rtcDesc) {
                     await pc.setRemoteDescription(rtcDesc);
