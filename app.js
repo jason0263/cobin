@@ -337,6 +337,9 @@
         if (floatingActionBar) floatingActionBar.classList.remove('hidden');
         startCallTimer();
         updateStageLayout();
+        
+        // 📱 啟動手機後台通話守護引擎
+        startBackgroundAudioKeeper();
 
         // 2. 獲取本地媒體 (鏡頭與麥克風)
         try {
@@ -1325,8 +1328,114 @@
     // ==== 📱 手機後台語音守護系統 PRO (特別針對 Samsung One UI / 各大 Android 深度睡眠強化) ====
     let silentAudioKeeper = null;
     let wakeLockSentinel = null;
-    let bgOscillatorNode = null;
-    let bgGainNode = null;
+    let keepAliveWorker = null;
+
+    function startBackgroundAudioKeeper() {
+        // 1. Web Worker 獨立背景線程
+        try {
+            if (!keepAliveWorker) {
+                const blob = new Blob([`
+                    let interval = null;
+                    self.onmessage = function(e) {
+                        if (e.data === 'start') {
+                            if (interval) clearInterval(interval);
+                            interval = setInterval(() => {
+                                self.postMessage('heartbeat');
+                            }, 800);
+                        } else if (e.data === 'stop') {
+                            if (interval) clearInterval(interval);
+                            interval = null;
+                        }
+                    };
+                `], { type: 'application/javascript' });
+                const workerUrl = URL.createObjectURL(blob);
+                keepAliveWorker = new Worker(workerUrl);
+                keepAliveWorker.onmessage = function() {
+                    if (currentRoomId) {
+                        if (audioContext && audioContext.state === 'suspended') {
+                            audioContext.resume().catch(() => {});
+                        }
+                        if (silentAudioKeeper && silentAudioKeeper.paused) {
+                            silentAudioKeeper.play().catch(() => {});
+                        }
+                    }
+                };
+                keepAliveWorker.postMessage('start');
+            }
+        } catch (e) {
+            console.warn('[Cobin] Web Worker 保活不可用:', e);
+        }
+
+        // 2. HTML5 Audio 標籤循環保活
+        if (!silentAudioKeeper) {
+            try {
+                silentAudioKeeper = new Audio();
+                silentAudioKeeper.src = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==';
+                silentAudioKeeper.loop = true;
+                silentAudioKeeper.volume = 0.01;
+                silentAudioKeeper.play().catch(() => {});
+            } catch (e) {}
+        }
+
+        // 3. 註冊系統通知列與鎖定畫面 MediaSession 通話控制
+        if ('mediaSession' in navigator) {
+            try {
+                navigator.mediaSession.metadata = new MediaMetadata({
+                    title: \`🎙️ \${currentRoomName || 'Cobin 語音房間'} (通話中)\`,
+                    artist: 'Cobin Voice & Video',
+                    album: '即時通話中 (點擊掛斷可退出)'
+                });
+                navigator.mediaSession.playbackState = 'playing';
+                navigator.mediaSession.setActionHandler('hangup', () => {
+                    window.leaveRoom();
+                });
+                navigator.mediaSession.setActionHandler('pause', () => {
+                    window.toggleMic();
+                });
+                navigator.mediaSession.setActionHandler('play', () => {
+                    window.toggleMic();
+                });
+            } catch (e) {}
+        }
+
+        // 4. 請求螢幕常亮 Wake Lock (防止自動休眠斷開)
+        if ('wakeLock' in navigator && !wakeLockSentinel) {
+            navigator.wakeLock.request('screen').then(lock => {
+                wakeLockSentinel = lock;
+            }).catch(() => {});
+        }
+    }
+
+    function stopBackgroundAudioKeeper() {
+        if (keepAliveWorker) {
+            try {
+                keepAliveWorker.postMessage('stop');
+                keepAliveWorker.terminate();
+            } catch (e) {}
+            keepAliveWorker = null;
+        }
+
+        if (silentAudioKeeper) {
+            try {
+                silentAudioKeeper.pause();
+                silentAudioKeeper.src = '';
+            } catch (e) {}
+            silentAudioKeeper = null;
+        }
+
+        if ('mediaSession' in navigator) {
+            try {
+                navigator.mediaSession.playbackState = 'none';
+            } catch (e) {}
+        }
+
+        if (wakeLockSentinel) {
+            try {
+                wakeLockSentinel.release().catch(() => {});
+            } catch (e) {}
+            wakeLockSentinel = null;
+        }
+    }
 
 
     // 當手機退到後台或切換 App 時，確保音訊會話持續活躍
@@ -1361,6 +1470,7 @@
 
     function cleanupCallState() {
         stopScreenShare();
+        stopBackgroundAudioKeeper();
 
         if (localStream) {
             localStream.getTracks().forEach(t => t.stop());
