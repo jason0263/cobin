@@ -776,7 +776,7 @@
             peerObj = peers[fromUid];
         }
 
-        const pc = peerObj?.pc;
+        const pc = peerObj ? peerObj.pc : null;
         if (!pc) return;
 
         try {
@@ -1555,7 +1555,7 @@
                 const avg = sum / buffer.length;
                 if (avg > 25 && peers[uid].videoTile) {
                     peers[uid].videoTile.classList.add('speaking');
-                } else if (peers[uid]?.videoTile) {
+                } else if (peers[uid] && peers[uid].videoTile) {
                     peers[uid].videoTile.classList.remove('speaking');
                 }
                 requestAnimationFrame(detectRemoteSpeaking);

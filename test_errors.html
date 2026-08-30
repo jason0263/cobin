@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Error Catcher</title>
+    <script>
+        window.onerror = function(message, source, lineno, colno, error) {
+            var msg = encodeURIComponent(message + ' at ' + lineno + ':' + colno);
+            var xhr = new XMLHttpRequest();
+            xhr.open("GET", "error_catcher.php?error=" + msg, false);
+            xhr.send();
+            return true;
+        };
+    </script>
+    <!-- Use the local app.js -->
+    <script src="app.js"></script>
+</head>
+<body>
+    <h1>Testing app.js</h1>
+    <script>
+        // Also try to simulate clicking joinRoom if it parses
+        setTimeout(() => {
+            try {
+                if (typeof joinRoom === 'function') {
+                    joinRoom('room1');
+                } else {
+                    var xhr = new XMLHttpRequest();
+                    xhr.open("GET", "error_catcher.php?error=" + encodeURIComponent("joinRoom is not defined"), false);
+                    xhr.send();
+                }
+            } catch (e) {
+                var xhr = new XMLHttpRequest();
+                xhr.open("GET", "error_catcher.php?error=" + encodeURIComponent("Runtime Error: " + e.message), false);
+                xhr.send();
+            }
+        }, 1000);
+    </script>
+</body>
+</html>
