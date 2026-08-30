@@ -1381,7 +1381,7 @@
         if ('mediaSession' in navigator) {
             try {
                 navigator.mediaSession.metadata = new MediaMetadata({
-                    title: \`🎙️ \${currentRoomName || 'Cobin 語音房間'} (通話中)\`,
+                    title: `🎙️ ${currentRoomName || 'Cobin 語音房間'} (通話中)`,
                     artist: 'Cobin Voice & Video',
                     album: '即時通話中 (點擊掛斷可退出)'
                 });
