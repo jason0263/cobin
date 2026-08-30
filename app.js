@@ -471,13 +471,6 @@
         const tile = ensureUserVideoTile(targetUid, targetNickname);
         const videoEl = tile.querySelector('video');
 
-        // 預先註冊 video 與 audio 的 sendrecv 收發器 (保證 WebRTC 始終具備視訊通道，螢幕分享 0 秒即時推送)
-        try {
-            pc.addTransceiver('audio', { direction: 'sendrecv' });
-            pc.addTransceiver('video', { direction: 'sendrecv' });
-        } catch (e) {}
-
-        // 建立獨立隱藏的 <audio> 播放器 (雙保險保證手機揚聲器 100% 播放)
         let audioEl = document.getElementById(`audio-${targetUid}`);
         if (!audioEl) {
             audioEl = document.createElement('audio');
@@ -501,16 +494,12 @@
             pendingCandidates: []
         };
 
-        // 加入本地軌道 (若已存在對應發送器則使用 replaceTrack)
+        // 加入本地軌道 (麥克風音訊與鏡頭視訊)
         if (localStream) {
             localStream.getTracks().forEach(track => {
-                const senders = pc.getSenders();
-                const sender = senders.find(s => s.track && s.track.kind === track.kind);
-                if (sender) {
-                    sender.replaceTrack(track);
-                } else {
-                    try { pc.addTrack(track, localStream); } catch (e) {}
-                }
+                try {
+                    pc.addTrack(track, localStream);
+                } catch (e) {}
             });
         }
 
