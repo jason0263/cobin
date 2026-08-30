@@ -1263,14 +1263,50 @@
         cleanupCallState();
     }
 
-    // ==== 📱 手機後台語音守護系統 PRO (退回主畫面、切換 App、玩手遊時 100% 保持語音不中斷) ====
+    // ==== 📱 手機後台語音守護系統 PRO (特別針對 Samsung One UI / 各大 Android 深度睡眠強化) ====
     let silentAudioKeeper = null;
     let wakeLockSentinel = null;
     let bgOscillatorNode = null;
     let bgGainNode = null;
+    let keepAliveWorker = null;
 
     function startBackgroundAudioKeeper() {
-        // 1. Web Audio API 底層音訊管道長效保活 (生成極致微弱 25Hz 音頻，騙過 iOS/Android 系統讓音訊執行緒永久活躍)
+        // 1. Web Worker 獨立背景線程 (徹底擊破 Samsung / Android 對主線程計時器的休眠凍結)
+        try {
+            if (!keepAliveWorker) {
+                const blob = new Blob([`
+                    let interval = null;
+                    self.onmessage = function(e) {
+                        if (e.data === 'start') {
+                            if (interval) clearInterval(interval);
+                            interval = setInterval(() => {
+                                self.postMessage('heartbeat');
+                            }, 800);
+                        } else if (e.data === 'stop') {
+                            if (interval) clearInterval(interval);
+                            interval = null;
+                        }
+                    };
+                `], { type: 'application/javascript' });
+                const workerUrl = URL.createObjectURL(blob);
+                keepAliveWorker = new Worker(workerUrl);
+                keepAliveWorker.onmessage = function() {
+                    if (currentRoomId) {
+                        if (audioContext && audioContext.state === 'suspended') {
+                            audioContext.resume().catch(() => {});
+                        }
+                        if (silentAudioKeeper && silentAudioKeeper.paused) {
+                            silentAudioKeeper.play().catch(() => {});
+                        }
+                    }
+                };
+                keepAliveWorker.postMessage('start');
+            }
+        } catch (e) {
+            console.warn('[Cobin] Web Worker 保活不可用:', e);
+        }
+
+        // 2. Web Audio API 底層音訊管道長效保活 (生成極致微弱 25Hz 音頻，維持系統音訊會話活躍)
         try {
             const ctx = audioContext || new (window.AudioContext || window.webkitAudioContext)();
             if (ctx.state === 'suspended') {
@@ -1288,7 +1324,7 @@
             }
         } catch (e) {}
 
-        // 2. HTML5 Audio 標籤循環保活 (第二重保險)
+        // 3. HTML5 Audio 標籤循環保活 (第二重保險)
         if (!silentAudioKeeper) {
             try {
                 silentAudioKeeper = new Audio();
@@ -1299,7 +1335,7 @@
             } catch (e) {}
         }
 
-        // 3. 註冊系統通知列與鎖定畫面 MediaSession 通話控制
+        // 4. 註冊系統通知列與鎖定畫面 MediaSession 通話控制
         if ('mediaSession' in navigator) {
             try {
                 navigator.mediaSession.metadata = new MediaMetadata({
@@ -1320,7 +1356,7 @@
             } catch (e) {}
         }
 
-        // 4. 請求螢幕常亮 Wake Lock (防止自動休眠斷開)
+        // 5. 請求螢幕常亮 Wake Lock (防止自動休眠斷開)
         if ('wakeLock' in navigator && !wakeLockSentinel) {
             navigator.wakeLock.request('screen').then(lock => {
                 wakeLockSentinel = lock;
@@ -1329,6 +1365,14 @@
     }
 
     function stopBackgroundAudioKeeper() {
+        if (keepAliveWorker) {
+            try {
+                keepAliveWorker.postMessage('stop');
+                keepAliveWorker.terminate();
+            } catch (e) {}
+            keepAliveWorker = null;
+        }
+
         if (bgOscillatorNode) {
             try {
                 bgOscillatorNode.stop();
