@@ -153,8 +153,11 @@
                 nickname: myNickname
             }));
 
-            // 如果有等待中的房間加入請求，立即發送
-            if (pendingRoomId) {
+            // 斷線重連後，如果本來已經在房間內，強制重新加入
+            if (currentRoomId) {
+                console.log('[Cobin] 斷線重連，自動重新加入房間:', currentRoomId);
+                sendJoinRoomSignal(currentRoomId);
+            } else if (pendingRoomId) {
                 const target = pendingRoomId;
                 pendingRoomId = null;
                 sendJoinRoomSignal(target);
@@ -1329,6 +1332,8 @@
     let silentAudioKeeper = null;
     let wakeLockSentinel = null;
     let keepAliveWorker = null;
+    let bgOscillatorNode = null;
+    let bgGainNode = null;
 
     function startBackgroundAudioKeeper() {
         // 1. Web Worker 獨立背景線程
@@ -1404,6 +1409,26 @@
                 wakeLockSentinel = lock;
             }).catch(() => {});
         }
+
+        // 5. 終極絕招：Web Audio API Oscillator (強制要求硬體持續處理音訊)
+        try {
+            if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            if (audioContext.state === 'suspended') {
+                audioContext.resume().catch(() => {});
+            }
+            if (!bgOscillatorNode) {
+                bgOscillatorNode = audioContext.createOscillator();
+                bgOscillatorNode.type = 'sine';
+                bgOscillatorNode.frequency.value = 0.01; // 幾乎聽不到的超低頻
+                bgGainNode = audioContext.createGain();
+                bgGainNode.gain.value = 0.001; // 極低音量
+                bgOscillatorNode.connect(bgGainNode);
+                bgGainNode.connect(audioContext.destination);
+                bgOscillatorNode.start();
+            }
+        } catch (e) {
+            console.warn('[Cobin] Web Audio 振盪器保活不可用:', e);
+        }
     }
 
     function stopBackgroundAudioKeeper() {
@@ -1413,6 +1438,15 @@
                 keepAliveWorker.terminate();
             } catch (e) {}
             keepAliveWorker = null;
+        }
+
+        if (bgOscillatorNode) {
+            try {
+                bgOscillatorNode.stop();
+                bgOscillatorNode.disconnect();
+            } catch (e) {}
+            bgOscillatorNode = null;
+            bgGainNode = null;
         }
 
         if (silentAudioKeeper) {
