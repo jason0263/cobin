@@ -51,6 +51,27 @@
     // 大屏幕 Spotlight 控制
     let spotlightUid = null;
 
+    // ==== 🎵 手機/嚴格瀏覽器安全 Audio Pool ====
+    // 解決 Safari 在非同步回調 (WebSocket/ontrack) 中建立 <audio> 無法播放的致命缺陷
+    const audioPool = [];
+    let audioPoolInitialized = false;
+
+    function initAudioPool() {
+        if (audioPoolInitialized) return;
+        audioPoolInitialized = true;
+        for (let i = 0; i < 20; i++) {
+            const a = document.createElement('audio');
+            a.autoplay = true;
+            a.playsInline = true;
+            a.setAttribute('playsinline', '');
+            a.setAttribute('webkit-playsinline', '');
+            a.style.cssText = 'position:absolute;width:1px;height:1px;opacity:0.01;pointer-events:none;';
+            document.body.appendChild(a);
+            audioPool.push({ el: a, uid: null });
+        }
+        console.log('[Cobin] Audio Pool 初始化完成 (容量: 20)');
+    }
+
     // ICE 配置 (多國家高穿透 STUN 伺服器池，支援 4G/5G 移動網路與跨運營商 NAT 穿透)
     const rtcConfig = {
         iceServers: [
@@ -305,11 +326,11 @@
         }
     }
 
-    // ==== 核心：點擊房間立即進入通話 ====
     window.joinRoom = async function(roomId) {
         console.log('[Cobin] 點擊進入房間:', roomId);
-        // 使用者手勢當下立即解鎖音訊上下文
+        // 使用者手勢當下立即解鎖音訊上下文與建立 Audio Pool
         unlockMobileAudio();
+        initAudioPool();
 
         if (currentRoomId === roomId) return;
 
@@ -636,8 +657,6 @@
         const peerObj = peers[uid];
         if (!peerObj) return;
         
-        // ★ 核心修復：在關閉 PC 前，明確停止所有遠端軌道
-        // 否則手機瀏覽器（特別是 iOS Safari）的硬體解碼器會被鎖死，導致下次重進時沒有聲音或黑屏
         try {
             if (peerObj.pc) {
                 peerObj.pc.getReceivers().forEach(receiver => {
@@ -651,9 +670,14 @@
         } catch (e) {}
         
         try { if (peerObj.videoTile) peerObj.videoTile.remove(); } catch (e) {}
-        const audioEl = document.getElementById(`audio-${uid}`);
-        if (audioEl) {
-            try { audioEl.pause(); audioEl.srcObject = null; audioEl.remove(); } catch (e) {}
+        
+        // ★ 釋放 Audio Pool 中的播放器，不刪除元素
+        if (audioPoolInitialized) {
+            const poolObj = audioPool.find(p => p.uid === uid);
+            if (poolObj) {
+                try { poolObj.el.pause(); poolObj.el.srcObject = null; } catch (e) {}
+                poolObj.uid = null;
+            }
         }
         delete peers[uid];
         if (spotlightUid === uid) spotlightUid = null;
@@ -758,25 +782,19 @@
             } else if (event.track.kind === 'audio') {
                 const audioStream = new MediaStream([event.track]);
 
-                // ★ 重新建立全新的 <audio> 元素 (徹底避免舊元素殘留問題)
-                let oldAudio = document.getElementById(`audio-${targetUid}`);
-                if (oldAudio) {
-                    try { oldAudio.pause(); oldAudio.srcObject = null; oldAudio.remove(); } catch (e) {}
+                // ★ 從預先建立好的 Audio Pool 中取用播放器，徹底繞過 iOS/Safari 的非同步建立媒體限制！
+                let poolObj = audioPool.find(p => p.uid === targetUid);
+                if (!poolObj) {
+                    poolObj = audioPool.find(p => p.uid === null);
                 }
-                const freshAudio = document.createElement('audio');
-                freshAudio.id = `audio-${targetUid}`;
-                freshAudio.autoplay = true;
-                freshAudio.playsInline = true;
-                freshAudio.setAttribute('playsinline', '');
-                freshAudio.setAttribute('webkit-playsinline', '');
-                freshAudio.style.cssText = 'position:absolute;width:1px;height:1px;opacity:0.01;pointer-events:none;';
-                if (peerObj.videoTile) {
-                    peerObj.videoTile.appendChild(freshAudio);
-                } else {
-                    document.body.appendChild(freshAudio);
+                if (!poolObj) {
+                    console.warn('[Cobin] Audio Pool 耗盡！');
+                    return;
                 }
-                peerObj.audioEl = freshAudio;
-
+                poolObj.uid = targetUid;
+                const freshAudio = poolObj.el;
+                
+                // 不再重新插入 DOM，直接重複使用現有元素
                 freshAudio.muted = false;
                 freshAudio.volume = 1.0;
                 freshAudio.srcObject = audioStream;
