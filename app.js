@@ -725,11 +725,19 @@
         // Perfect Negotiation: 當軌道有變動時自動發起 Offer
         pc.onnegotiationneeded = async () => {
             try {
-                // 如果目前正在處理遠端 Offer，則不可建立本地 Offer，否則會發生 InvalidStateError
+                // 如果目前正在處理遠端 Offer，則不可建立本地 Offer
                 if (pc.signalingState === 'have-remote-offer') {
-                    console.log(`[Cobin] 🛡️ 正在處理遠端 Offer，略過本次 onnegotiationneeded`);
+                    console.log(`[Cobin] 🛡️ 正在處理遠端 Offer，略過本地 Offer 建立`);
                     return;
                 }
+                
+                // ★ 終極防碰撞機制：在初始連線階段，強制只有 UID 較大的一方才能發送 Offer
+                // 這樣能保證「絕對不會發生信令碰撞」，從根本上避免舊版瀏覽器 Rollback 時的 ICE Bug！
+                if (pc.connectionState !== 'connected' && myUid < targetUid) {
+                    console.log(`[Cobin] 🛡️ 初始防碰撞：UID 較小，等待對方發起 Offer`);
+                    return;
+                }
+
                 peerObj.makingOffer = true;
                 const offer = await pc.createOffer();
                 await pc.setLocalDescription(offer);
