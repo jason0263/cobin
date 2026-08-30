@@ -51,30 +51,6 @@
     // 大屏幕 Spotlight 控制
     let spotlightUid = null;
 
-    // ==== 🎵 手機/嚴格瀏覽器安全 Audio Pool ====
-    // 解決 Safari 在非同步回調 (WebSocket/ontrack) 中建立 <audio> 無法播放的致命缺陷
-    const audioPool = [];
-    let audioPoolInitialized = false;
-
-    function initAudioPool() {
-        if (audioPoolInitialized) return;
-        audioPoolInitialized = true;
-        // 1-sample 靜音 WAV，專門用來欺騙 iOS Safari 讓它認為這是一個合法的媒體播放
-        const SILENT_WAV = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
-        for (let i = 0; i < 20; i++) {
-            const a = document.createElement('audio');
-            a.autoplay = true;
-            a.playsInline = true;
-            a.setAttribute('playsinline', '');
-            a.setAttribute('webkit-playsinline', '');
-            a.style.cssText = 'position:absolute;width:1px;height:1px;opacity:0.01;pointer-events:none;';
-            a.src = SILENT_WAV;
-            document.body.appendChild(a);
-            audioPool.push({ el: a, uid: null });
-        }
-        console.log('[Cobin] Audio Pool 初始化完成 (容量: 20)');
-    }
-
     // ICE 配置 (多國家高穿透 STUN 伺服器池 + 免費公開 TURN 中繼伺服器)
     const rtcConfig = {
         iceServers: [
@@ -337,9 +313,8 @@
 
     window.joinRoom = async function(roomId) {
         console.log('[Cobin] 點擊進入房間:', roomId);
-        // 使用者手勢當下立即解鎖音訊上下文與建立 Audio Pool
+        // 使用者手勢當下立即解鎖音訊上下文
         unlockMobileAudio();
-        initAudioPool();
 
         if (currentRoomId === roomId) return;
 
@@ -474,12 +449,6 @@
         if (audioContext && audioContext.state === 'suspended') {
             audioContext.resume().catch(() => {});
         }
-        // ★ 核心修復：不管有沒有 srcObject，只要是 pool 裡面的 audio，全部強制執行一次 play() 來獲得 iOS 免死金牌
-        document.querySelectorAll('audio').forEach(el => {
-            if (el.paused) {
-                el.play().catch(() => {});
-            }
-        });
     }
     window.addEventListener('click', unlockMobileAudio, { passive: true });
     window.addEventListener('touchstart', unlockMobileAudio, { passive: true });
@@ -661,14 +630,16 @@
         
         try { if (peerObj.videoTile) peerObj.videoTile.remove(); } catch (e) {}
         
-        // ★ 釋放 Audio Pool 中的播放器，不刪除元素
-        if (audioPoolInitialized) {
-            const poolObj = audioPool.find(p => p.uid === uid);
-            if (poolObj) {
-                try { poolObj.el.pause(); poolObj.el.srcObject = null; } catch (e) {}
-                poolObj.uid = null;
-            }
+        // 釋放獨立的 <audio> 標籤
+        const audioEl = document.getElementById(`audio-${uid}`);
+        if (audioEl) {
+            try {
+                audioEl.pause();
+                audioEl.srcObject = null;
+                audioEl.remove();
+            } catch (e) {}
         }
+        
         delete peers[uid];
         if (spotlightUid === uid) spotlightUid = null;
     }
@@ -755,49 +726,38 @@
                 spotlightUid = targetUid;
                 updateStageLayout();
             } else if (event.track.kind === 'audio') {
-                const audioStream = new MediaStream([event.track]);
+                // Discord 標準邏輯：優先使用 event.streams[0] (完整同步流)
+                const audioStream = (event.streams && event.streams[0]) ? event.streams[0] : new MediaStream([event.track]);
 
-                // ★ 從預先建立好的 Audio Pool 中取用播放器，徹底繞過 iOS/Safari 的非同步建立媒體限制！
-                let poolObj = audioPool.find(p => p.uid === targetUid);
-                if (!poolObj) {
-                    poolObj = audioPool.find(p => p.uid === null);
+                // 移除舊的殘留標籤避免疊音
+                let oldAudio = document.getElementById(`audio-${targetUid}`);
+                if (oldAudio) {
+                    try { oldAudio.pause(); oldAudio.srcObject = null; oldAudio.remove(); } catch (e) {}
                 }
-                if (!poolObj) {
-                    console.warn('[Cobin] Audio Pool 耗盡！');
-                    return;
-                }
-                poolObj.uid = targetUid;
-                const freshAudio = poolObj.el;
+
+                // 動態建立乾淨的 <audio>
+                const freshAudio = document.createElement('audio');
+                freshAudio.id = `audio-${targetUid}`;
+                freshAudio.autoplay = true;
+                freshAudio.playsInline = true;
+                freshAudio.setAttribute('playsinline', '');
+                freshAudio.setAttribute('webkit-playsinline', '');
                 
-                // 不再重新插入 DOM，直接重複使用現有元素
+                // 為了避免被 Chromium 忽略，保持 1px 大小但完全不可見
+                freshAudio.style.cssText = 'position:absolute;width:1px;height:1px;opacity:0.01;pointer-events:none;';
+                
+                // 附加到 DOM 後才賦值 srcObject，這是許多 Android WebViews 的標準要求
+                document.body.appendChild(freshAudio);
+                
                 freshAudio.muted = false;
                 freshAudio.volume = 1.0;
                 freshAudio.srcObject = audioStream;
 
-                // ★ 強化版多次延遲重試播放 (徹底攻克手機瀏覽器自動播放限制)
-                const forcePlay = () => {
-                    if (!freshAudio || !freshAudio.srcObject) return;
-                    freshAudio.muted = false;
-                    freshAudio.volume = 1.0;
-                    const p = freshAudio.play();
-                    if (p !== undefined) {
-                        p.catch(() => {
-                            const banner = document.getElementById('audioUnlockBanner');
-                            if (banner) banner.style.display = 'block';
-                        });
-                    }
-                    if (audioContext && audioContext.state === 'suspended') {
-                        audioContext.resume().catch(() => {});
-                    }
-                };
+                freshAudio.play().catch(e => {
+                    console.warn('[Cobin] 語音自動播放受阻:', e);
+                });
 
-                forcePlay();
-                event.track.onunmute = forcePlay;
-                // 延遲重試 (處理某些手機瀏覽器第一次 play() 被靜默吞掉的情況)
-                setTimeout(forcePlay, 300);
-                setTimeout(forcePlay, 1000);
-                setTimeout(forcePlay, 3000);
-
+                // 同步波形分析
                 setupRemoteAudioAnalysis(audioStream, targetUid);
             }
         };
@@ -828,8 +788,10 @@
         };
 
         pc.oniceconnectionstatechange = () => {
+            console.log(`[Cobin] ICE 狀態 (${targetNickname || targetUid}): ${pc.iceConnectionState}`);
             if (pc.iceConnectionState === 'failed') {
                 console.warn(`[Cobin] ICE 穿透異常，自動重試 (${targetNickname || targetUid})`);
+                showToast(`⚠️ 網路防火牆封鎖了與 ${targetNickname || '成員'} 的連線`);
                 initiateHandshake(targetUid, true);
             }
         };
