@@ -550,6 +550,11 @@
             await initLocalMedia();
         }
 
+        // ★ 銷毀所有舊連線再重建 (保證重進房間時 100% 乾淨)
+        for (const user of existingUsers) {
+            destroyPeer(user.uid);
+        }
+
         for (const user of existingUsers) {
             await createPeerConnection(user.uid, user.nickname, true);
         }
@@ -602,19 +607,36 @@
         }
     }
 
-    // ==== 新使用者加入房間 (舊成員立即預先建立 PeerConnection 並注入本地音訊) ====
+    // ==== 新使用者加入房間 (舊成員銷毀舊連線 → 重建全新連線 → 雙向主動握手) ====
     async function handleUserJoined(user) {
         if (user.uid === myUid) return;
         showToast(`👋 ${user.nickname} 加入了房間`);
         playToneSound('join'); // 🔔 播放高音進房提示音
-        ensureUserVideoTile(user.uid, user.nickname);
 
         if (!localStream) {
             await initLocalMedia();
         }
 
-        // 舊成員立即建立 PeerConnection 注入本地麥克風 Track，確保 Answer 生成 sendrecv 雙向音訊
-        await createPeerConnection(user.uid, user.nickname, false);
+        // ★ 徹底銷毀與該用戶的舊連線 (避免殘留僵屍 PeerConnection 導致重進後無聲)
+        destroyPeer(user.uid);
+
+        // ★ 以 isInitiator=true 建立全新連線並主動發起 Offer
+        // 雙方同時 Offer 不會衝突 — WebRTC 規範的 "glare" 機制會自動協調為一個勝出
+        await createPeerConnection(user.uid, user.nickname, true);
+    }
+
+    // ==== 徹底銷毀單個 Peer 連線 (釋放所有資源，保證下次建立全新連線) ====
+    function destroyPeer(uid) {
+        const peerObj = peers[uid];
+        if (!peerObj) return;
+        try { if (peerObj.pc) peerObj.pc.close(); } catch (e) {}
+        try { if (peerObj.videoTile) peerObj.videoTile.remove(); } catch (e) {}
+        const audioEl = document.getElementById(`audio-${uid}`);
+        if (audioEl) {
+            try { audioEl.pause(); audioEl.srcObject = null; audioEl.remove(); } catch (e) {}
+        }
+        delete peers[uid];
+        if (spotlightUid === uid) spotlightUid = null;
     }
 
     // ==== 使用者離開房間 ====
@@ -622,27 +644,17 @@
         if (peers[uid]) {
             showToast(`🏃 ${peers[uid].nickname || '成員'} 離開了房間`);
             playToneSound('leave'); // 🚪 播放低音退房提示音
-            if (peers[uid].pc) {
-                peers[uid].pc.close();
-            }
-            if (peers[uid].videoTile) {
-                peers[uid].videoTile.remove();
-            }
-            const audioEl = document.getElementById(`audio-${uid}`);
-            if (audioEl) audioEl.remove();
-
-            delete peers[uid];
-            if (spotlightUid === uid) {
-                spotlightUid = null;
-            }
-            updateStageLayout();
         }
+        destroyPeer(uid);
+        updateStageLayout();
     }
 
     // ==== 建立 WebRTC 連線 (Mesh P2P) ====
     async function createPeerConnection(targetUid, targetNickname, isInitiator) {
+        // ★ 如果已存在舊連線，先徹底銷毀 (解決重進房間後殘留僵屍連線導致無聲的根本問題)
         if (peers[targetUid] && peers[targetUid].pc) {
-            return peers[targetUid].pc;
+            console.log(`[Cobin] ♻️ 銷毀舊連線並重建 (${targetNickname || targetUid})`);
+            destroyPeer(targetUid);
         }
 
         const pc = new RTCPeerConnection(rtcConfig);
@@ -722,28 +734,49 @@
                 updateStageLayout();
             } else if (event.track.kind === 'audio') {
                 const audioStream = new MediaStream([event.track]);
-                if (peerObj.audioEl) {
-                    peerObj.audioEl.muted = false;
-                    peerObj.audioEl.volume = 1.0;
-                    peerObj.audioEl.srcObject = audioStream;
-                    
-                    const triggerPlay = () => {
-                        if (peerObj.audioEl) {
-                            const p = peerObj.audioEl.play();
-                            if (p !== undefined) {
-                                p.catch(() => {
-                                    const banner = document.getElementById('audioUnlockBanner');
-                                    if (banner) banner.style.display = 'block';
-                                });
-                            }
-                        }
-                        if (audioContext && audioContext.state === 'suspended') {
-                            audioContext.resume().catch(() => {});
-                        }
-                    };
-                    triggerPlay();
-                    event.track.onunmute = triggerPlay;
+
+                // ★ 重新建立全新的 <audio> 元素 (徹底避免舊元素殘留問題)
+                let oldAudio = document.getElementById(`audio-${targetUid}`);
+                if (oldAudio) {
+                    try { oldAudio.pause(); oldAudio.srcObject = null; oldAudio.remove(); } catch (e) {}
                 }
+                const freshAudio = document.createElement('audio');
+                freshAudio.id = `audio-${targetUid}`;
+                freshAudio.autoplay = true;
+                freshAudio.playsInline = true;
+                freshAudio.setAttribute('playsinline', '');
+                freshAudio.setAttribute('webkit-playsinline', '');
+                freshAudio.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0.01;pointer-events:none;';
+                document.body.appendChild(freshAudio);
+                peerObj.audioEl = freshAudio;
+
+                freshAudio.muted = false;
+                freshAudio.volume = 1.0;
+                freshAudio.srcObject = audioStream;
+
+                // ★ 強化版多次延遲重試播放 (徹底攻克手機瀏覽器自動播放限制)
+                const forcePlay = () => {
+                    if (!freshAudio || !freshAudio.srcObject) return;
+                    freshAudio.muted = false;
+                    freshAudio.volume = 1.0;
+                    const p = freshAudio.play();
+                    if (p !== undefined) {
+                        p.catch(() => {
+                            const banner = document.getElementById('audioUnlockBanner');
+                            if (banner) banner.style.display = 'block';
+                        });
+                    }
+                    if (audioContext && audioContext.state === 'suspended') {
+                        audioContext.resume().catch(() => {});
+                    }
+                };
+
+                forcePlay();
+                event.track.onunmute = forcePlay;
+                // 延遲重試 (處理某些手機瀏覽器第一次 play() 被靜默吞掉的情況)
+                setTimeout(forcePlay, 300);
+                setTimeout(forcePlay, 1000);
+                setTimeout(forcePlay, 3000);
 
                 setupRemoteAudioAnalysis(audioStream, targetUid);
             }
@@ -885,6 +918,17 @@
         if (!signal) return;
 
         let peerObj = peers[fromUid];
+
+        // ★ 收到 offer 時：如果已有舊連線，徹底銷毀再重建
+        // 這是解決「電腦退出再進入後手機聽不到聲音」的核心修復
+        if (signal.type === 'offer') {
+            if (peerObj && peerObj.pc) {
+                console.log(`[Cobin] ♻️ 收到新 Offer，銷毀舊連線重建 (${fromNickname || fromUid})`);
+                destroyPeer(fromUid);
+                peerObj = null;
+            }
+        }
+
         if (!peerObj || !peerObj.pc) {
             await createPeerConnection(fromUid, fromNickname, false);
             peerObj = peers[fromUid];
