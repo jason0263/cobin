@@ -55,6 +55,7 @@
             --font-display: 'Outfit', sans-serif;
             --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
             --safe-bottom: env(safe-area-inset-bottom, 16px);
+            --safe-top: env(safe-area-inset-top, 0px);
         }
 
         * {
@@ -70,8 +71,9 @@
             color: var(--text-title);
             font-family: var(--font-ui);
             height: 100%;
-            height: -webkit-fill-available;
+            height: 100dvh;
             overflow: hidden;
+            overscroll-behavior: none;
             display: flex;
             width: 100vw;
         }
@@ -349,7 +351,7 @@
 
         .mobile-toggle-btn {
             display: none;
-            background: var(--bg-card);
+            background: rgba(255, 255, 255, 0.08);
             border: 1px solid var(--glass-border);
             color: #fff;
             padding: 6px 12px;
@@ -419,7 +421,6 @@
             gap: 8px;
         }
 
-        /* 大廳 3 欄滿版自適應卡片網格 */
         .lobby-grid-cards {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
@@ -880,18 +881,20 @@
             top: 20px;
             left: 50%;
             transform: translate(-50%, -40px);
-            background: rgba(14, 18, 28, 0.92);
+            background: rgba(14, 18, 28, 0.95);
             backdrop-filter: blur(20px);
-            border: 1px solid rgba(255, 255, 255, 0.15);
-            padding: 10px 22px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 12px 24px;
             border-radius: var(--radius-pill);
             font-size: 13px;
             font-weight: 600;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+            box-shadow: 0 12px 36px rgba(0, 0, 0, 0.8);
             z-index: 999999;
             opacity: 0;
             transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
             pointer-events: none;
+            max-width: 90vw;
+            text-align: center;
         }
 
         .toast-msg.show {
@@ -899,24 +902,29 @@
             opacity: 1;
         }
 
-        /* 📱 手機與平板 RWD 適配 */
+        /* 📱 專屬手機端極致佈局 (Mobile Dedicated App Interface) */
         @media (max-width: 1024px) {
             .right-sidebar {
-                display: none;
+                display: none !important;
             }
         }
 
         @media (max-width: 768px) {
+            html, body {
+                height: 100dvh;
+                overflow: hidden;
+            }
+
             .left-sidebar {
                 position: fixed;
                 top: 0;
                 bottom: 0;
                 left: 0;
                 width: 82%;
-                max-width: 300px;
+                max-width: 320px;
                 transform: translateX(-100%);
-                z-index: 100;
-                box-shadow: 20px 0 50px rgba(0, 0, 0, 0.9);
+                z-index: 1000;
+                box-shadow: 20px 0 60px rgba(0, 0, 0, 0.95);
             }
 
             .left-sidebar.mobile-open {
@@ -927,9 +935,9 @@
                 display: none;
                 position: fixed;
                 inset: 0;
-                background: rgba(0, 0, 0, 0.7);
-                backdrop-filter: blur(6px);
-                z-index: 90;
+                background: rgba(0, 0, 0, 0.75);
+                backdrop-filter: blur(8px);
+                z-index: 990;
             }
 
             .sidebar-backdrop.mobile-open {
@@ -941,8 +949,9 @@
             }
 
             .stage-header {
-                height: 52px;
-                padding: 0 14px;
+                height: 54px;
+                padding: 0 16px;
+                background: rgba(7, 9, 14, 0.85);
             }
 
             .stage-title-left {
@@ -952,15 +961,20 @@
 
             .lobby-screen {
                 padding: 16px 14px;
+                gap: 14px;
             }
 
             .lobby-hero-banner {
-                padding: 20px 16px;
-                margin-bottom: 20px;
+                padding: 20px 18px;
+                margin-bottom: 12px;
             }
 
             .lobby-hero-text h2 {
                 font-size: 20px;
+            }
+
+            .lobby-hero-text p {
+                font-size: 13px;
             }
 
             .lobby-grid-cards {
@@ -968,29 +982,31 @@
                 gap: 12px;
             }
 
-            /* 手機通話舞台專屬佈局 */
+            /* 手機通話舞台專屬佈局 (100% 滿版無黑邊，自適應上下等分) */
             .video-grid-container {
-                padding: 10px 10px 80px 10px;
-                gap: 10px;
+                padding: 10px 10px 88px 10px !important;
+                gap: 10px !important;
                 display: flex !important;
                 flex-direction: column !important;
-                align-items: center !important;
+                align-items: stretch !important;
                 justify-content: flex-start !important;
+                overflow-y: auto !important;
             }
 
             .video-grid-container .video-tile {
                 width: 100% !important;
-                height: auto !important;
-                aspect-ratio: 16 / 9 !important;
-                max-height: 40vh !important;
-                border-radius: 14px !important;
+                min-height: 180px !important;
+                max-height: 44vh !important;
+                flex: 1 1 auto !important;
+                aspect-ratio: auto !important;
+                border-radius: 16px !important;
             }
 
+            /* 當有螢幕分享時，手機自動最大化置頂展示 */
             .video-grid-container .video-tile.is-screen {
-                width: 100% !important;
-                height: auto !important;
-                max-height: 60vh !important;
-                aspect-ratio: 16 / 9 !important;
+                min-height: 260px !important;
+                max-height: 62vh !important;
+                flex: 2 1 auto !important;
                 border-color: #5865f2 !important;
                 order: -1 !important;
             }
@@ -999,16 +1015,17 @@
                 bottom: max(14px, var(--safe-bottom));
                 padding: 6px 14px;
                 gap: 10px;
+                background: rgba(14, 18, 28, 0.95);
             }
 
             .call-btn {
-                width: 44px;
-                height: 44px;
+                width: 46px;
+                height: 46px;
             }
 
             .call-btn.btn-hangup {
-                width: 48px;
-                height: 48px;
+                width: 50px;
+                height: 50px;
             }
         }
     </style>
@@ -1237,7 +1254,7 @@
             <span>在線成員清單</span>
         </div>
         <div class="right-members-container" id="rightMembersContainer">
-            <div style="font-size:12px; color:var(--text-muted); padding:10px; text-align:center;">
+            <div style="font-size:12px; color:var(--text-muted); padding:16px 8px; text-align:center;">
                 正在同步頻道在線狀態...
             </div>
         </div>
@@ -1284,6 +1301,6 @@
             }
         }
     </script>
-    <script src="app.js?v=20260830_ultimate_polish"></script>
+    <script src="app.js?v=20260830_mobile_perfection"></script>
 </body>
 </html>
