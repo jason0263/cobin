@@ -685,7 +685,7 @@
         audioEl.playsInline = true;
         audioEl.setAttribute('playsinline', '');
         audioEl.setAttribute('webkit-playsinline', '');
-        audioEl.style.cssText = 'position:absolute;width:0;height:0;opacity:0;pointer-events:none;';
+        audioEl.style.cssText = 'position:absolute;width:1px;height:1px;opacity:0.01;pointer-events:none;';
         tile.appendChild(audioEl);
 
         peers[targetUid] = {
@@ -753,7 +753,7 @@
                 freshAudio.playsInline = true;
                 freshAudio.setAttribute('playsinline', '');
                 freshAudio.setAttribute('webkit-playsinline', '');
-                freshAudio.style.cssText = 'position:absolute;width:0;height:0;opacity:0;pointer-events:none;';
+                freshAudio.style.cssText = 'position:absolute;width:1px;height:1px;opacity:0.01;pointer-events:none;';
                 if (peerObj.videoTile) {
                     peerObj.videoTile.appendChild(freshAudio);
                 } else {
