@@ -801,6 +801,20 @@
                     return;
                 }
 
+                if (description.type === 'answer' && pc.signalingState === 'stable') {
+                    console.log(`[Cobin] 🛡️ 忽略重複或過期的 Answer (${fromNickname || fromUid})`);
+                    return;
+                }
+
+                if (description.type === 'offer' && pc.signalingState !== 'stable' && polite) {
+                    console.log(`[Cobin] 🔄 Polite Peer 發生碰撞，手動 rollback 本地 Offer`);
+                    try {
+                        await pc.setLocalDescription({ type: 'rollback' });
+                    } catch (e) {
+                        console.warn('[Cobin] 手動 Rollback 失敗 (舊瀏覽器可能不支援):', e);
+                    }
+                }
+
                 await pc.setRemoteDescription(description);
                 if (description.type === 'offer') {
                     const answer = await pc.createAnswer();
