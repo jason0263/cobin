@@ -281,12 +281,15 @@
         startCallTimer();
         updateStageLayout();
 
+        // 📱 啟動手機後台通話守護引擎 (確保退到主畫面/切換App/玩遊戲時語音不中斷)
+        startBackgroundAudioKeeper();
+
         // 2. 獲取本地媒體 (鏡頭與麥克風)
         try {
             await initLocalMedia();
         } catch (err) {
             console.warn('[Cobin] 媒體請求失敗:', err);
-            showToast('⚠️ 請允許存取麥克風與鏡頭');
+            showToast('⚠️ 請允許存取麥克風以進行語音通話');
         }
 
         // 3. 發送加入房間信令
@@ -1169,8 +1172,90 @@
         cleanupCallState();
     }
 
+    // ==== 📱 手機後台語音守護系統 (退回主畫面、切換 App、玩手遊時保持通話不中斷) ====
+    let silentAudioKeeper = null;
+    let wakeLockSentinel = null;
+
+    function startBackgroundAudioKeeper() {
+        // 1. 建立循環靜音音訊元素 (向 iOS Safari & Android 聲明正在播放音訊，防止標籤頁被系統凍結)
+        if (!silentAudioKeeper) {
+            try {
+                silentAudioKeeper = new Audio();
+                silentAudioKeeper.src = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==';
+                silentAudioKeeper.loop = true;
+                silentAudioKeeper.volume = 0.01;
+                silentAudioKeeper.play().catch(() => {});
+            } catch (e) {}
+        }
+
+        // 2. 註冊系統通知列與鎖定畫面 MediaSession 通話控制
+        if ('mediaSession' in navigator) {
+            try {
+                navigator.mediaSession.metadata = new MediaMetadata({
+                    title: `🎙️ ${currentRoomName || 'Cobin 語音房間'} (通話中)`,
+                    artist: 'Cobin Voice & Video',
+                    album: '即時通話中 (點擊掛斷可退出)'
+                });
+                navigator.mediaSession.playbackState = 'playing';
+                navigator.mediaSession.setActionHandler('hangup', () => {
+                    window.leaveRoom();
+                });
+                navigator.mediaSession.setActionHandler('pause', () => {
+                    window.toggleMic();
+                });
+                navigator.mediaSession.setActionHandler('play', () => {
+                    window.toggleMic();
+                });
+            } catch (e) {}
+        }
+
+        // 3. 請求螢幕常亮 Wake Lock (防止自動休眠斷開)
+        if ('wakeLock' in navigator && !wakeLockSentinel) {
+            navigator.wakeLock.request('screen').then(lock => {
+                wakeLockSentinel = lock;
+            }).catch(() => {});
+        }
+    }
+
+    function stopBackgroundAudioKeeper() {
+        if (silentAudioKeeper) {
+            try {
+                silentAudioKeeper.pause();
+                silentAudioKeeper.src = '';
+            } catch (e) {}
+            silentAudioKeeper = null;
+        }
+
+        if ('mediaSession' in navigator) {
+            try {
+                navigator.mediaSession.playbackState = 'none';
+            } catch (e) {}
+        }
+
+        if (wakeLockSentinel) {
+            try {
+                wakeLockSentinel.release().catch(() => {});
+            } catch (e) {}
+            wakeLockSentinel = null;
+        }
+    }
+
+    // 當手機退到後台或切換 App 時，確保音訊會話持續活躍
+    document.addEventListener('visibilitychange', () => {
+        if (currentRoomId) {
+            console.log(`[Cobin] 頁面可見性變化: ${document.hidden ? '📱 後台運行中' : '👀 回到前台'}`);
+            if (audioContext && audioContext.state === 'suspended') {
+                audioContext.resume().catch(() => {});
+            }
+            if (silentAudioKeeper && silentAudioKeeper.paused) {
+                silentAudioKeeper.play().catch(() => {});
+            }
+        }
+    });
+
     function cleanupCallState() {
         stopScreenShare();
+        stopBackgroundAudioKeeper();
 
         if (localStream) {
             localStream.getTracks().forEach(t => t.stop());
