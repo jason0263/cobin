@@ -725,6 +725,11 @@
         // Perfect Negotiation: 當軌道有變動時自動發起 Offer
         pc.onnegotiationneeded = async () => {
             try {
+                // 如果目前正在處理遠端 Offer，則不可建立本地 Offer，否則會發生 InvalidStateError
+                if (pc.signalingState === 'have-remote-offer') {
+                    console.log(`[Cobin] 🛡️ 正在處理遠端 Offer，略過本次 onnegotiationneeded`);
+                    return;
+                }
                 peerObj.makingOffer = true;
                 const offer = await pc.createOffer();
                 await pc.setLocalDescription(offer);
