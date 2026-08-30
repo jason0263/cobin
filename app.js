@@ -51,7 +51,7 @@
     // 大屏幕 Spotlight 控制
     let spotlightUid = null;
 
-    // ICE 配置 (全球多節點 STUN 伺服器池，支援移動網路與跨網穿透)
+    // ICE 配置 (多國家高穿透 STUN 伺服器池，支援 4G/5G 移動網路與跨運營商 NAT 穿透)
     const rtcConfig = {
         iceServers: [
             { urls: 'stun:stun.l.google.com:19302' },
@@ -59,7 +59,10 @@
             { urls: 'stun:stun2.l.google.com:19302' },
             { urls: 'stun:stun3.l.google.com:19302' },
             { urls: 'stun:stun4.l.google.com:19302' },
-            { urls: 'stun:global.stun.twilio.com:3478' }
+            { urls: 'stun:global.stun.twilio.com:3478' },
+            { urls: 'stun:stun.cloudflare.com:3478' },
+            { urls: 'stun:stun.nextcloud.com:443' },
+            { urls: 'stun:stun.services.mozilla.com:3478' }
         ],
         iceCandidatePoolSize: 10
     };
@@ -428,18 +431,46 @@
     }
 
     // ==== 📱 手機端音訊全域解鎖器 (解決 iOS / Android 揚聲器靜音與自動播放政策) ====
-    function unlockMobileAudio() {
+    window.unlockAllAudioManually = function() {
         if (audioContext && audioContext.state === 'suspended') {
             audioContext.resume().catch(() => {});
         }
         document.querySelectorAll('audio, video').forEach(el => {
+            el.muted = false;
+            el.volume = 1.0;
+            if (el.srcObject) {
+                el.play().catch(() => {});
+            }
+        });
+        const banner = document.getElementById('audioUnlockBanner');
+        if (banner) banner.style.display = 'none';
+        showToast('🔊 聲音已成功開啟！');
+    };
+
+    function unlockMobileAudio() {
+        if (audioContext && audioContext.state === 'suspended') {
+            audioContext.resume().catch(() => {});
+        }
+        document.querySelectorAll('audio').forEach(el => {
             if (el.srcObject && el.paused) {
                 el.play().catch(() => {});
             }
         });
+        const banner = document.getElementById('audioUnlockBanner');
+        if (banner && audioContext && audioContext.state === 'running') {
+            banner.style.display = 'none';
+        }
     }
     window.addEventListener('click', unlockMobileAudio, { passive: true });
     window.addEventListener('touchstart', unlockMobileAudio, { passive: true });
+
+    // 檢測微信 / LINE / 社群 App 內嵌瀏覽器
+    const ua = navigator.userAgent.toLowerCase();
+    if (ua.includes('micromessenger') || ua.includes('line') || ua.includes('fban') || ua.includes('fbav')) {
+        setTimeout(() => {
+            showToast('💡 建議點擊右上角「以 Safari / Chrome 開啟」以獲得最佳語音體驗！');
+        }, 1500);
+    }
 
     // 建立 0 消耗空白視訊軌道 (確保 WebRTC 始終建立視訊通道，螢幕分享 replaceTrack 0 延遲瞬間推送到手機)
     function createBlankVideoTrack() {
@@ -734,8 +765,16 @@
             console.log(`[Cobin] P2P 連線狀態 (${targetNickname || targetUid}): ${pc.connectionState}`);
             if (pc.connectionState === 'connected') {
                 showToast(`🟢 已與 ${targetNickname || '成員'} 建立即時通話！`);
-            } else if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
-                handleUserLeft(targetUid);
+            } else if (pc.connectionState === 'failed') {
+                console.warn(`[Cobin] 連線異常，嘗試自動 ICE 重啟修復 (${targetNickname || targetUid})`);
+                initiateHandshake(targetUid, true);
+            }
+        };
+
+        pc.oniceconnectionstatechange = () => {
+            if (pc.iceConnectionState === 'failed') {
+                console.warn(`[Cobin] ICE 穿透異常，自動重試 (${targetNickname || targetUid})`);
+                initiateHandshake(targetUid, true);
             }
         };
 
@@ -756,7 +795,7 @@
     }
 
     // ==== 核心：發起 WebRTC 握手 Offer ====
-    async function initiateHandshake(targetUid) {
+    async function initiateHandshake(targetUid, isRestart = false) {
         const peerObj = peers[targetUid];
         if (!peerObj || !peerObj.pc) return;
         const pc = peerObj.pc;
@@ -775,7 +814,8 @@
         try {
             const offer = await pc.createOffer({
                 offerToReceiveAudio: true,
-                offerToReceiveVideo: true
+                offerToReceiveVideo: true,
+                iceRestart: Boolean(isRestart)
             });
             await pc.setLocalDescription(offer);
 
