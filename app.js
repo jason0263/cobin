@@ -461,22 +461,6 @@
     }
 
     // ==== 📱 手機端音訊全域解鎖器 (解決 iOS / Android 揚聲器靜音與自動播放政策) ====
-    window.unlockAllAudioManually = function() {
-        if (audioContext && audioContext.state === 'suspended') {
-            audioContext.resume().catch(() => {});
-        }
-        document.querySelectorAll('audio, video').forEach(el => {
-            el.muted = false;
-            el.volume = 1.0;
-            if (el.srcObject) {
-                el.play().catch(() => {});
-            }
-        });
-        const banner = document.getElementById('audioUnlockBanner');
-        if (banner) banner.style.display = 'none';
-        showToast('🔊 聲音已成功開啟！');
-    };
-
     function unlockMobileAudio() {
         if (audioContext && audioContext.state === 'suspended') {
             audioContext.resume().catch(() => {});
@@ -486,10 +470,6 @@
                 el.play().catch(() => {});
             }
         });
-        const banner = document.getElementById('audioUnlockBanner');
-        if (banner && audioContext && audioContext.state === 'running') {
-            banner.style.display = 'none';
-        }
     }
     window.addEventListener('click', unlockMobileAudio, { passive: true });
     window.addEventListener('touchstart', unlockMobileAudio, { passive: true });
@@ -714,26 +694,11 @@
         const tile = ensureUserVideoTile(targetUid, targetNickname);
         const videoEl = tile.querySelector('video');
 
-        // ★ 將 <audio> 放在可見的 videoTile 內，避免手機瀏覽器對螢幕外 (-9999px) 元素強制靜音
-        let oldAudioEl = document.getElementById(`audio-${targetUid}`);
-        if (oldAudioEl) {
-            try { oldAudioEl.pause(); oldAudioEl.srcObject = null; oldAudioEl.remove(); } catch (e) {}
-        }
-        const audioEl = document.createElement('audio');
-        audioEl.id = `audio-${targetUid}`;
-        audioEl.autoplay = true;
-        audioEl.playsInline = true;
-        audioEl.setAttribute('playsinline', '');
-        audioEl.setAttribute('webkit-playsinline', '');
-        audioEl.style.cssText = 'position:absolute;width:1px;height:1px;opacity:0.01;pointer-events:none;';
-        tile.appendChild(audioEl);
-
         peers[targetUid] = {
             pc: pc,
             nickname: targetNickname,
             videoTile: tile,
             videoEl: videoEl,
-            audioEl: audioEl,
             avatarEl: tile.querySelector('.avatar-placeholder'),
             micIcon: tile.querySelector('.mic-status-icon'),
             pendingCandidates: []
@@ -1774,19 +1739,8 @@
         }
 
         for (const uid in peers) {
-            if (peers[uid].pc) peers[uid].pc.close();
-            if (peers[uid].videoTile) peers[uid].videoTile.remove();
-            delete peers[uid];
+            destroyPeer(uid);
         }
-
-        // 徹底清除所有殘留的遠端音訊播放器
-        document.querySelectorAll('audio[id^="audio-"]').forEach(a => {
-            try {
-                a.pause();
-                a.srcObject = null;
-                a.remove();
-            } catch (e) {}
-        });
 
         if (callTimerInterval) {
             clearInterval(callTimerInterval);
